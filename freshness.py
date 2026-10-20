@@ -5,7 +5,7 @@ from email.utils import parsedate_to_datetime
 
 HOT_HOURS = 2
 FRESH_HOURS = 24
-DEFAULT_CHECK_MINUTES = 20
+DEFAULT_CHECK_MINUTES = 1
 
 
 def publication_time(raw):
