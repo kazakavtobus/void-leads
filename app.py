@@ -25,6 +25,7 @@ from engine import (NICHES, SOURCES, STATUSES, WEB_STATUSES, detect_contacts,
                     draft_message, iso_now, norm, read_import_csv, safe_url, score_lead)
 from osm import CITIES, CATEGORIES, search_osm
 from public_hunter import classify, fetch_source, validate_vk_slug
+from target_hunter import analyze_target, DEFAULT_TARGET_NICHES, NICHE_NAMES
 from freshness import freshness, iso_publication, publication_time, DEFAULT_CHECK_MINUTES
 from source_import import read_source_csv, validate_source, template_csv
 from release_config import APP_VERSION, RELEASE_REPO
@@ -40,7 +41,8 @@ _session_vk_token = ""  # RAM, or recoverable via Windows DPAPI on opted-in devi
 _tray = None
 _server = None
 _single_mutex = None
-PREFS_DEFAULT = {"notifications": True, "min_notification_score": 55}
+PREFS_DEFAULT = {"notifications": True, "min_notification_score": 60,
+                 "target_niches": DEFAULT_TARGET_NICHES.copy()}
 
 def preferences():
     p = DATA_DIR / "settings.json"
@@ -168,6 +170,10 @@ def init_db(seed: bool = True):
             "analysis_reason": "TEXT NOT NULL DEFAULT ''",
             "classifier_version": "INTEGER NOT NULL DEFAULT 0",
             "manual_override": "INTEGER NOT NULL DEFAULT 0",
+            "target_score": "INTEGER NOT NULL DEFAULT 0",
+            "target_reason": "TEXT NOT NULL DEFAULT ''",
+            "site_evidence": "TEXT NOT NULL DEFAULT 'not_checked'",
+            "target_version": "INTEGER NOT NULL DEFAULT 0",
         }.items():
             if field not in columns_posts:
                 db.execute(f"ALTER TABLE public_posts ADD COLUMN {field} {ddl}")
@@ -183,6 +189,17 @@ def init_db(seed: bool = True):
                           analysis_reason=?, review_status=?, classifier_version=2
                           WHERE id=?""",
                        (result['ad_score'],result['niche'],result['reason'],status,old['id']))
+        # Opportunity score migration must not change advertisement score or review decisions.
+        for old in db.execute("""SELECT id,text,review_status,manual_override
+                                FROM public_posts WHERE target_version<1""").fetchall():
+            analysis = classify(old['text'])
+            if old['review_status']=='new' and old['manual_override']:
+                analysis['is_candidate']=True
+            target = analyze_target(old['text'],analysis)
+            db.execute("""UPDATE public_posts SET target_score=?,target_reason=?,
+                          site_evidence=?,target_version=1 WHERE id=?""",
+                       (target['target_score'],target['target_reason'],
+                        target['site_evidence'],old['id']))
         db.execute("CREATE INDEX IF NOT EXISTS public_posts_published ON public_posts(published_at)")
         db.execute("""CREATE TABLE IF NOT EXISTS app_meta (
             key TEXT PRIMARY KEY, value TEXT NOT NULL
@@ -393,13 +410,16 @@ def store_public_post(db, source_id: int, data: dict):
     # VK "marked_as_ads" is not enough: news may also be promoted.
     is_ad = analysis["is_candidate"]
     score = min(100, analysis["ad_score"] + (7 if data.get("marked_as_ads") and is_ad else 0))
+    target = analyze_target(text, analysis)
     cur = db.execute("""INSERT INTO public_posts(source_id,external_id,source_url,text,published_at,
-        score,niche,suggested_name,created_at,promoted,review_status,analysis_reason,classifier_version)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        score,niche,suggested_name,created_at,promoted,review_status,analysis_reason,classifier_version,
+        target_score,target_reason,site_evidence,target_version)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (source_id,external,url,text,iso_publication(data.get("published_at", "")),
          score,analysis["niche"],analysis["suggested_name"],iso_now(),
          int(bool(data.get("marked_as_ads"))), 'new' if is_ad else 'filtered',
-         analysis['reason'],2))
+         analysis['reason'],2,target['target_score'],target['target_reason'],
+         target['site_evidence'],1))
     return cur.lastrowid, True
 
 
