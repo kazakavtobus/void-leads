@@ -57,6 +57,50 @@ function qualifiesTarget(p){
    (prefs.target_niches||[]).includes(p.niche) &&
    Number(p.target_score||0)>=Number(prefs.min_notification_score??60);
 }
+function showUpdateOverlay(){
+ let box=$('#updateOverlay');
+ if(box)return box;
+ box=document.createElement('div');
+ box.id='updateOverlay';
+ box.className='update-overlay';
+ box.setAttribute('role','status');
+ box.setAttribute('aria-live','polite');
+ box.innerHTML='<div class="update-overlay-card"><span class="update-overlay-icon">V</span><strong>VOID LEADS обновляется</strong><p id="updateStage">Подготавливаем безопасное обновление…</p><div class="update-progress-track"><span></span></div><small>Не выключай компьютер до завершения. Новая версия откроется автоматически.</small></div>';
+ document.body.append(box);
+ return box;
+}
+function monitorUpdate(){
+ showUpdateOverlay();
+ let misses=0;
+ const timer=setInterval(async()=>{
+  try{
+   const data=await api('/api/update/progress');
+   misses=0;
+   const stage=$('#updateStage');
+   if(stage)stage.textContent=data.message||'Обновление выполняется…';
+   if(data.state==='failed'||data.state==='idle'){
+    clearInterval(timer);
+    document.querySelector('#updateOverlay')?.remove();
+    toast(data.message||'Не удалось выполнить обновление',true);
+    const btn=$('#installUpdateButton');
+    if(btn)btn.disabled=false;
+   }
+   if(data.state==='closing'){
+    if(stage)stage.textContent='Старая версия закрывается. Новая программа откроется сама.';
+    clearInterval(timer);
+    setTimeout(()=>{try{window.close();}catch{}},850);
+   }
+  }catch{
+   misses++;
+   if(misses>=3){
+    clearInterval(timer);
+    const stage=$('#updateStage');
+    if(stage)stage.textContent='Программа закрыта для установки обновления. Новая версия откроется автоматически.';
+    try{window.close();}catch{}
+   }
+  }
+ },1200);
+}
 function targetSettings(){
  const selected=state.config.preferences?.target_niches||[];
  const names=Object.entries(state.config.target_niche_names||{});
@@ -115,10 +159,14 @@ async function handleAction(element){const a=element.dataset.action;const id=ele
   finally{element.disabled=false;}return;
  }
  if(a==='install-update'){
-  if(!confirm('Закрыть VOID LEADS и установить новое обновление? База будет сохранена.'))return;
+  if(!confirm('Установить новую версию? После проверки установщика программа сама закроется и перезапустится.'))return;
   element.disabled=true;
-  try{const res=await api('/api/update/install','POST',{});toast(res.message);const status=$('#updateState');if(status)status.textContent='Установка запущена. Приложение закроется и откроется снова.';}
-  catch(e){toast(e.message,true);element.disabled=false;}return;
+  try{
+   const res=await api('/api/update/install','POST',{});
+   const status=$('#updateState');
+   if(status)status.textContent=res.message;
+   monitorUpdate();
+  }catch(e){toast(e.message,true);element.disabled=false;}return;
  }
  if(a==='save-target-niches'){
   const chosen=[...document.querySelectorAll('[data-target-niche]:checked')].map(el=>el.dataset.targetNiche);
