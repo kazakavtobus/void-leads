@@ -3,6 +3,8 @@ name: VOID LEADS — Windows installer
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*.*.*"
 
@@ -32,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+          if ("${{ github.ref_type }}" -ne "tag") {
             $appVersion = (python -c "import release_config; print(release_config.APP_VERSION)").Trim()
             $tag = "v$appVersion"
           }
@@ -84,6 +86,7 @@ jobs:
             dist/VOID-Leads.exe
 
       - name: Publish installable release
+        if: github.event_name != 'push' || github.ref_type == 'tag' || contains(github.event.head_commit.message, '[release]')
         uses: softprops/action-gh-release@v3
         with:
           tag_name: "${{ steps.version.outputs.tag }}"
