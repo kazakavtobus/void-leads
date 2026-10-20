@@ -39,3 +39,14 @@
 @media(min-width:1051px){.source-card-list{max-height:min(66vh,760px);overflow:auto;padding-right:5px;scrollbar-color:#cbd7f6 transparent;scrollbar-width:thin}}
 @media(max-width:1050px){.source-card-list{max-height:560px;overflow:auto;overscroll-behavior:contain;padding-right:3px}}
 @media(max-width:600px){.source-card-list{max-height:445px}}
+
+
+/* VOID v0.5: source-quality diagnostics, glass design unchanged */
+.source-diagnostics{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 12px}
+.source-diagnostics span{display:inline-flex;align-items:center;gap:5px;background:rgba(79,124,255,.055);border:1px solid #e3eafd;padding:7px 10px;border-radius:10px;color:#53647c;font-size:14px}
+.source-diagnostics b{color:#253958;font-size:15px}
+.source-warning{background:#f4f7fc;border-radius:10px;padding:10px 12px;color:#687b98!important;font-size:14px!important;line-height:1.5}
+.post-explanation{background:#f2f6fc;border:1px solid #e4ecfa;border-radius:11px;padding:11px 13px;color:#54647c;font-size:15px;line-height:1.55;margin:12px 0 4px}
+.post-explanation b{color:#283952}
+.rejected-post{background:rgba(247,249,253,.9);border-style:dashed}
+@media(max-width:760px){.source-diagnostics span{font-size:13px;padding:6px 9px}.post-explanation{font-size:14px}}
