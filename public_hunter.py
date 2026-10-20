@@ -36,24 +36,101 @@ NICHES = {
 }
 
 
+# Conservative rules: an incident mentioning construction is not a construction ad.
+# A news post with a phone number is also not automatically an advertiser.
+NEWS_TERMS = re.compile(
+    r"\b(?:погиб\w*|скончал\w*|пострадал\w*|трагеди\w*|происшеств\w*|"
+    r"дтп|авари\w*|заболеваемост\w*|covid(?:-19)?|коронавирус\w*|"
+    r"орви|роспотребнадзор\w*|вакцинаци\w*|прививк\w*|"
+    r"полици\w*|уголовн\w*|расследован\w*|в больниц\w*|"
+    r"пожар\w*|спасател\w*|погибш\w*|сообща(?:ет|ют|ется)|"
+    r"жёстк\w* новост\w*|жестк\w* новост\w*)\b", re.I)
+PUBLIC_NEWS = re.compile(
+    r"\b(?:по данным|в результате|на месте происшествия|в регионе|"
+    r"за неделю выросл\w*|по пути в больницу|на прошлой неделе|"
+    r"об этом сообщили|напомним, что|согласно статистике)\b", re.I)
+BUSINESS_PITCH = re.compile(
+    r"(?:\b(?:закаж(?:ите|и|ем|у|ут)|заказ(?:ать|ы|ов)?\s+(?:на|принимаем)|"
+    r"принимаем\s+заказы|изготавливаем|изготовим|"
+    r"предлагаем|выполняем|оказываем\s+услуг|"
+    r"запиш(?:итесь|ись)|запись\s+(?:на|открыта)|"
+    r"открыта\s+запись|звоните|звони|пишите\s+(?:нам|в\s+личк)|"
+    r"записывайтесь|оставьте\s+заявк\w*|рассчитаем\s+стоимост\w*|"
+    r"получите\s+скидк\w*|скидк\w*|акци[яиюе]|"
+    r"бесплатн\w*\s+замер|"
+    r"под\s+ключ|"
+    r"сда[её]м\s+в\s+аренд\w*|"
+    r"доставим|доставка\s+по\s+город\w*|"
+    r"прода[её]м|продажа|"
+    r"открыл(?:ись|ся|ась)\s+(?:магазин|салон|студия|пекарня))\b|"
+    r"кухн\w*\s+на\s+заказ|мебел\w*\s+на\s+заказ|"
+    r"ремонт\s+квартир\s+под\s+ключ|"
+    r"аренд\w*\s+(?:спецтехник\w*|экскаватор\w*|автокран\w*))", re.I)
+CALL_TO_ACTION = re.compile(
+    r"\b(?:звон(?:ите|и)|пиш(?:ите|и)|запис(?:аться|ывайтесь|ь)|"
+    r"остав(?:ьте|ляйте)\s+заявк\w*|"
+    r"обращайтесь|успейте|приходите|"
+    r"закаж(?:ите|и)|в\s+личк\w*|"
+    r"по\s+телефон\w*|"
+    r"цен[аыу]\s*(?:от|:)|стоимост\w*\s*(?:от|:))\b", re.I)
+PRIVATE_SALE = re.compile(r"^\s*(?:продам|отдам|куплю)\s+(?:б/у|бу\b|свой|свою|личн\w*)", re.I)
+
+
 def classify(text: str) -> dict:
-    lowered = norm(text)[:12000]
-    contacts = detect_contacts(text)
+    """Return a high-precision *advertiser* candidate, never merely keyword similarity.
+
+    false negatives can be corrected using the 'Отобрано фильтром' review queue.
+    All existing client records and manual overrides remain untouched.
+    """
+    plain = str(text or "")[:12000]
+    lowered = norm(plain)
+    contacts = detect_contacts(plain)
     matches = [s for s in SIGNALS["offer"] if s in lowered]
-    cta = [s for s in SIGNALS["lead"] if s in lowered]
-    score = min(100, 12 + 12 * min(len(matches), 3) + 10 * min(len(cta), 2)
-                + (17 if any(contacts.values()) else 0) + (8 if len(text) > 80 else 0))
-    niche = next((n for n, words in NICHES.items() if any(w in lowered for w in words)), "other")
-    first_line = next((p.strip() for p in (text or "").splitlines() if p.strip()), "")
-    # This is a *suggestion* from the headline, not a verified legal/business name.
+    cta_matches = [s for s in SIGNALS["lead"] if s in lowered]
+    pitch = bool(BUSINESS_PITCH.search(lowered))
+    action = bool(CALL_TO_ACTION.search(lowered))
+    news = bool(NEWS_TERMS.search(lowered) or PUBLIC_NEWS.search(lowered))
+    private = bool(PRIVATE_SALE.search(lowered))
+    industry = next((n for n, words in NICHES.items()
+                     if any(w in lowered for w in words)), "other")
+    has_contact = bool(contacts.get("phone") or contacts.get("email")
+                       or contacts.get("social") or contacts.get("website"))
+    # A standalone "call us" in a news group is insufficient. Strong commercial
+    # pitch must exist, together with evidence of business/transaction intent.
+    business_context = bool(matches or industry != "other"
+                            or re.search(r"\b(?:магазин\w*|студи\w*|салон\w*|"
+                                         r"мастерск\w*|компани\w*|бренд\w*|"
+                                         r"прайс\w*|товар\w*|услуг\w*)\b", lowered))
+    candidate = bool(pitch and business_context and
+                     (action or has_contact or industry != "other") and not private)
+    # An accident / epidemiological report stays news even when accompanied by
+    # a publisher's social link or VK marked_as_ads flag.
+    if news and not (pitch and action and business_context):
+        candidate = False
+    if candidate:
+        reason = "Есть коммерческое предложение"
+        if has_contact:
+            reason += " и контакт бизнеса"
+        elif action:
+            reason += " и призыв обратиться"
+    elif news:
+        reason = "Новость или происшествие, а не предложение услуг"
+    elif private:
+        reason = "Разовое частное объявление"
+    else:
+        reason = "Нет подтверждённого коммерческого предложения"
+    score = (24 + 26 * int(pitch) + 12 * int(action)
+             + 14 * int(has_contact) + 13 * int(industry != "other")
+             + min(10, 3 * len(matches)))
+    if not candidate:
+        score = min(25, score // 4)
+    first_line = next((p.strip() for p in plain.splitlines() if p.strip()), "")
     name = re.sub(r'^[\s#✨🔥📢📍]+', '', first_line)[:92]
-    # Avoid treating ordinary city news ("road repairs", "construction started") as an ad.
-    # A commercial offer is stronger with a contact, call to action or sale/booking language.
-    explicit_offer = any(x in lowered for x in ("закаж", "изготов", "предлагаем", "скидк", "акци", "доставк", "продаем", "продаём", "под ключ", "бесплатный замер", "спешите", "открылись"))
-    candidate = bool((matches and (cta or any(contacts.values()) or explicit_offer)) or
-                     (cta and any(contacts.values()) and len(matches) > 0))
-    return {"ad_score": score, "is_candidate": candidate,
-            "niche": niche, "suggested_name": name, **contacts}
+    return {"ad_score": min(score, 100), "is_candidate": candidate,
+            "niche": industry, "suggested_name": name, "reason": reason,
+            "news": news, "signals": {
+                "commercial_offer": pitch, "call_to_action": action,
+                "business_contact": has_contact, "news_context": news}, **contacts}
 
 
 def _validate_public_url(url: str) -> str:
