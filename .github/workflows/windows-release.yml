@@ -1,0 +1,94 @@
+name: VOID LEADS — Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip pytest pyinstaller
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $appVersion = (python -c "import release_config; print(release_config.APP_VERSION)").Trim()
+            $tag = "v$appVersion"
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Invalid release version: $tag"
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          $appVersion = $tag.Substring(1)
+          "appVersion=$appVersion" >> $env:GITHUB_OUTPUT
+
+      - name: Embed update source
+        shell: pwsh
+        run: python packaging/prepare_release.py --repo "${{ github.repository }}" --tag "${{ steps.version.outputs.tag }}"
+
+      - name: Compile app and updater
+        shell: pwsh
+        run: |
+          python -m PyInstaller --clean --noconfirm --onefile --windowed --name VOID-Leads --add-data "static;static" app.py
+          python -m PyInstaller --clean --noconfirm --onefile --windowed --name VOID-Updater updater.py
+          if (!(Test-Path dist/VOID-Leads.exe) -or !(Test-Path dist/VOID-Updater.exe)) { throw "Executable missing" }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw "Inno Setup compiler missing" }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.appVersion }}" installer/void-leads.iss
+          if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
+
+      - name: Create SHA-256 checksum
+        shell: pwsh
+        run: |
+          $setup = "release/VOID-Leads-Setup.exe"
+          if (!(Test-Path $setup)) { throw "Installer not created" }
+          $hash = (Get-FileHash -Algorithm SHA256 $setup).Hash.ToLowerInvariant()
+          Set-Content -Path release/SHA256SUMS.txt -Value "$hash  VOID-Leads-Setup.exe" -Encoding ascii
+
+      - name: Keep CI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VOID-Leads-Windows
+          path: |
+            release/VOID-Leads-Setup.exe
+            release/SHA256SUMS.txt
+            dist/VOID-Leads.exe
+
+      - name: Publish installable release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: "${{ steps.version.outputs.tag }}"
+          name: "VOID LEADS ${{ steps.version.outputs.appVersion }}"
+          files: |
+            release/VOID-Leads-Setup.exe
+            release/SHA256SUMS.txt
+          generate_release_notes: true
