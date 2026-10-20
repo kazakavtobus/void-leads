@@ -58,3 +58,59 @@
 .settings-check{display:flex;gap:11px;align-items:center;margin:13px 0;font-size:16px;line-height:1.6;color:#283958}
 .settings-check input{width:20px;height:20px;accent-color:#4f7cff;flex-shrink:0}
 @media(max-width:830px){.source-post-filters{width:100%}.source-post-filters .control{max-width:none;min-width:140px}}
+
+/* VOID LEADS 0.7.1 — Target Hunter filter bar / glass layout */
+.public-posts-heading{gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.public-filter-panel{container-type:inline-size;padding:15px;border:1px solid #e0e7f5;background:linear-gradient(135deg,rgba(255,255,255,.82),rgba(245,248,255,.66));border-radius:18px;box-shadow:0 8px 28px rgba(47,83,155,.035);margin-bottom:13px;min-width:0}
+.public-filter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;align-items:stretch}
+.public-filter-field{min-width:0;display:flex;flex-direction:column;gap:7px;font-size:14px;color:#697a94;font-weight:660;line-height:1.4}
+.public-filter-field .control{min-width:0;width:100%;max-width:none;font-size:16px;min-height:46px;border-color:#dae3f3;background:rgba(255,255,255,.92);color:#26364e;border-radius:12px}
+.public-filter-toggle{border:1px solid #e0e7f4;background:rgba(255,255,255,.78);border-radius:13px;padding:12px 13px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-width:0}
+.public-toggle-copy{display:flex;min-width:0;flex-direction:column;gap:2px}
+.public-toggle-copy strong{font-size:15px;font-weight:700;color:#293952;line-height:1.35}
+.public-toggle-copy small{font-size:13px;color:#7c8ba1;line-height:1.35}
+.public-filter-toggle input{position:absolute;opacity:0;width:1px;height:1px}
+.public-toggle-track{background:#cbd5e6;border-radius:999px;width:46px;height:27px;flex:0 0 46px;display:flex;align-items:center;padding:3px;transition:background .2s}
+.public-toggle-track>span{width:21px;height:21px;border-radius:50%;background:#fff;box-shadow:0 2px 5px #263d6350;transition:transform .2s}
+.public-filter-toggle input:checked+.public-toggle-track{background:#4f7cff}
+.public-filter-toggle input:checked+.public-toggle-track>span{transform:translateX(19px)}
+.public-filter-toggle input:focus-visible+.public-toggle-track{outline:3px solid #9db5ff;outline-offset:3px}
+@container (min-width: 920px){.public-filter-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@container (max-width: 465px){.public-filter-grid{grid-template-columns:minmax(0,1fr)}}
+.target-settings{border:1px solid #dde6f5;border-radius:18px;background:linear-gradient(140deg,rgba(255,255,255,.90),rgba(243,247,255,.82));box-shadow:0 8px 24px rgba(51,91,170,.035);margin:0 0 20px;overflow:hidden}
+.target-settings-summary{list-style:none;display:flex;align-items:center;gap:12px;cursor:pointer;padding:15px 17px;min-width:0}
+.target-settings-summary::-webkit-details-marker{display:none}
+.target-settings-icon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#eaf0ff;color:#4f7cff;flex:0 0 38px}
+.target-settings-title{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
+.target-settings-title strong{color:#273754;font-size:16px;line-height:1.35}
+.target-settings-title small{color:#8290a6;font-size:13px;line-height:1.35}
+.target-settings-count{white-space:nowrap;color:#5371c1;font-size:13px;font-weight:750;background:#eaf0ff;padding:6px 9px;border-radius:9px}
+.target-settings-chevron{font-size:25px;line-height:1;color:#697b97;transform:translateY(-2px);transition:transform .2s}
+.target-settings[open] .target-settings-chevron{transform:rotate(180deg) translateY(2px)}
+.target-settings-summary:focus-visible{outline:3px solid #b0c5ff;outline-offset:-3px}
+.target-settings-content{border-top:1px solid #e4eaf5;padding:17px}
+.target-settings-hint{font-size:14px;line-height:1.65;color:#72829a;margin:0 0 16px}
+.target-options{display:flex;flex-wrap:wrap;gap:9px}
+.target-pill{cursor:pointer;display:inline-flex;max-width:100%;position:relative}
+.target-pill input{opacity:0;width:1px;height:1px;position:absolute;top:50%;left:50%}
+.target-pill-label{display:inline-flex;gap:8px;align-items:center;max-width:100%;min-height:42px;padding:9px 14px;border-radius:999px;border:1px solid #dce5f3;background:rgba(255,255,255,.85);color:#596b85;font-size:15px;line-height:1.4;font-weight:640;transition:background .18s,color .18s,border-color .18s,box-shadow .18s}
+.target-pill-check{font-size:12px;font-weight:800;display:none}
+.target-pill input:checked+.target-pill-label{background:rgba(79,124,255,.12);border-color:#aac1ff;color:#355dc4}
+.target-pill input:checked+.target-pill-label .target-pill-check{display:inline}
+.target-pill:hover .target-pill-label{border-color:#a5b9e1}
+.target-pill input:focus-visible+.target-pill-label{outline:3px solid #aac2ff;outline-offset:2px}
+.target-settings-actions{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-top:18px}
+.target-settings-actions .hint{margin:0;font-size:14px}
+.target-settings-actions .btn{min-height:42px}
+@media(max-width:680px){
+ .public-filter-panel{padding:12px}
+ .target-settings-summary{padding:12px;gap:9px}
+ .target-settings-content{padding:13px}
+ .target-settings-title small{font-size:12px}
+ .target-settings-title strong{font-size:15px}
+ .target-settings-count{font-size:12px}
+ .target-pill-label{font-size:14px}
+}
+@media(prefers-reduced-motion:reduce){
+ .public-toggle-track,.public-toggle-track>span,.target-pill-label,.target-settings-chevron{transition:none}
+}
