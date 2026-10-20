@@ -83,7 +83,8 @@ def test_vk_fetch_mock(client,monkeypatch):
            {'external_id':'-11_11','text':'Хорошая погода','url':'https://vk.com/wall-11_11'}]
     monkeypatch.setattr(app,'fetch_source',lambda src,token: posts)
     _,r=client('/api/public/check','POST',{'source_id':sid,'token':'authorized-test-token'})
-    assert r=={'read':2,'matched':1,'added':1,'fresh_candidates':1}
+    assert all(r[key] == value for key,value in {'read':2,'matched':1,'added':1,'fresh_candidates':1}.items())
+    assert r['filtered']==1
     _,data=client('/api/public/posts')
     assert len(data)==1 and 'монтаж окон' in data[0]['text']
 
