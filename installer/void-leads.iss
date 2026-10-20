@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.4.0"
+  #define AppVersion "0.6.0"
 #endif
 [Setup]
 AppId={{19E4F5E1-43D5-4C13-9890-071C070D2F60}
@@ -9,6 +9,7 @@ AppPublisher=VOID LEADS
 DefaultDirName={localappdata}\Programs\VOID LEADS
 DefaultGroupName=VOID LEADS
 UninstallDisplayIcon={app}\VOID-Leads.exe
+SetupIconFile=..\assets\void-leads.ico
 OutputDir=..\release
 OutputBaseFilename=VOID-Leads-Setup
 Compression=lzma2
