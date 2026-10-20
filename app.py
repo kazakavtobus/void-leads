@@ -154,6 +154,7 @@ def init_db(seed: bool = True):
             "last_count": "INTEGER NOT NULL DEFAULT 0",
             "last_matched": "INTEGER NOT NULL DEFAULT 0",
             "last_filtered": "INTEGER NOT NULL DEFAULT 0",
+            "last_reviewable": "INTEGER NOT NULL DEFAULT 0",
             "last_added": "INTEGER NOT NULL DEFAULT 0",
             "last_archive": "INTEGER NOT NULL DEFAULT 0",
             "last_undated": "INTEGER NOT NULL DEFAULT 0",
@@ -403,10 +404,14 @@ def store_public_post(db, source_id: int, data: dict):
 
 
 def public_post_rows(db, mode='fresh'):
-    rows = db.execute("""SELECT p.*, COALESCE(s.name,'Источник удалён') AS source_name,
+    # The review queue should display the posts fetched most recently, even
+    # when their publication dates are old. Other queues remain chronological.
+    sort = "p.created_at DESC, p.id DESC" if mode == 'filtered' else "p.published_at DESC, p.id DESC"
+    rows = db.execute(f"""SELECT p.*, COALESCE(s.name,'Источник удалён') AS source_name,
                        COALESCE(s.city,'') AS city, COALESCE(s.kind,'manual') AS source_kind
                        FROM public_posts p LEFT JOIN public_sources s ON s.id=p.source_id
-                       ORDER BY p.published_at DESC, p.id DESC LIMIT 2500""").fetchall()
+                       {("WHERE p.review_status='filtered'" if mode == 'filtered' else "")}
+                       ORDER BY {sort} LIMIT 2500""").fetchall()
     values = []
     for r in rows:
         post = dict(r)
@@ -482,18 +487,21 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
     try:
         rows = fetch_source(dict(src), resolved_token if src['kind']=='vk' else '')
         added, matched, recent, rejected, archived, undated = 0, 0, 0, 0, 0, 0
-        samples = 0
+        reviewable = 0
         fresh_new_scores = []
         for post in rows:
             candidate = classify(post.get('text',''))
             category = freshness(post.get('published_at', ''))
             if not candidate['is_candidate']:
                 rejected += 1
-                # Keep a *small, reviewable* sample of fresh rejections,
-                # never a full archive of the news feed.
-                if category in {'hot','fresh'} and samples < 10:
-                    store_public_post(db, sid, post)
-                    samples += 1
+                # Keep a bounded *diagnostic* queue of all rejected posts,
+                # including posts older than 24h. Otherwise "filtered: 23"
+                # can show an empty list whenever a public has old content.
+                # Repeat checks are deduplicated in store_public_post.
+                rejected_id, _ = store_public_post(db, sid, post)
+                if db.execute("SELECT review_status FROM public_posts WHERE id=?",
+                              (rejected_id,)).fetchone()[0] == 'filtered':
+                    reviewable += 1
                 continue
             matched += 1
             if category in {'hot','fresh'}:
@@ -508,20 +516,28 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
                 added += 1
                 fresh_new_scores.append(db.execute('SELECT score FROM public_posts WHERE id=?',
                                                   (post_id,)).fetchone()[0])
-        # Rejected samples are not CRM entries; prune after seven days.
+        # Rejected posts are a *diagnostic* queue, not permanent leads.
+        # Retain 7 days since discovery regardless of publication date.
         db.execute("""DELETE FROM public_posts WHERE review_status='filtered'
                       AND created_at < ?""",
                    ((publication_time(iso_now()) - timedelta(days=7)).isoformat(),))
+        # Extra cap protects local storage for users monitoring many sources.
+        # Manual restores are 'new' and remain untouched by this pruning.
+        db.execute("""DELETE FROM public_posts
+                      WHERE review_status='filtered' AND id NOT IN (
+                        SELECT id FROM public_posts WHERE review_status='filtered'
+                        ORDER BY created_at DESC, id DESC LIMIT 3000
+                      )""")
         db.execute("""UPDATE public_sources SET last_checked=?,last_error='',last_count=?,
-                    last_matched=?,last_filtered=?,last_added=?,
+                    last_matched=?,last_filtered=?,last_reviewable=?,last_added=?,
                     last_archive=?,last_undated=? WHERE id=?""",
-                   (iso_now(),len(rows),matched,rejected,added,archived,undated,sid))
+                   (iso_now(),len(rows),matched,rejected,reviewable,added,archived,undated,sid))
         db.commit()
         if added:
             notify_new_advertisers(added, src['name'], max(fresh_new_scores, default=0))
         return {'read':len(rows),'matched':matched,'added':added,
                 'fresh_candidates':recent,'filtered':rejected,
-                'archived':archived,'undated':undated}
+                'reviewable':reviewable,'archived':archived,'undated':undated}
     except Exception as exc:
         db.execute('UPDATE public_sources SET last_error=? WHERE id=?', (str(exc)[:400],sid))
         db.commit()
