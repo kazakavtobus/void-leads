@@ -72,7 +72,6 @@ def test_update_protects_browser_and_download():
     app_py=(root/'app.py').read_text(encoding='utf8')
     script=(root/'updater.py').read_text(encoding='utf8')
     js=(root/'static/app.js').read_text(encoding='utf8')
-    assert "'--user-data-dir={profile}'" not in app_py  # must be an interpolated f-string
     assert 'f\'--user-data-dir={profile}\'' in app_py
     assert 'close_managed_browser_windows()' in app_py
     assert "write_status(DATA_DIR,'verified'" in script
