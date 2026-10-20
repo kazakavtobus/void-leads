@@ -29,6 +29,9 @@ jobs:
       - name: Run tests
         run: python -m pytest -q
 
+      - name: Check UI JavaScript syntax
+        run: node --check static/app.js
+
       - name: Resolve release version
         id: version
         shell: pwsh
