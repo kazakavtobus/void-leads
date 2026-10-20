@@ -454,8 +454,10 @@ def public_post_rows(db, mode='fresh'):
 
 
 def public_post_counts(db):
-    rows = db.execute('SELECT published_at,review_status FROM public_posts').fetchall()
-    out = {'fresh':0, 'hot':0, 'archive':0, 'undated':0, 'converted':0, 'filtered':0, 'all':len(rows)}
+    rows = db.execute('SELECT published_at,review_status,target_score,niche FROM public_posts').fetchall()
+    selected = set(preferences().get('target_niches', DEFAULT_TARGET_NICHES))
+    threshold = int(preferences().get('min_notification_score',60))
+    out = {'fresh':0, 'hot':0, 'archive':0, 'undated':0, 'converted':0, 'filtered':0, 'target_fresh':0, 'all':len(rows)}
     for row in rows:
         if row['review_status']=='filtered':
             out['filtered'] += 1
@@ -466,6 +468,8 @@ def public_post_counts(db):
             out[category] += 1
             if category=='hot':
                 out['fresh'] += 1
+            if category in {'hot','fresh'} and row['niche'] in selected and row['target_score']>=threshold:
+                out['target_fresh'] += 1
     return out
 
 
@@ -508,7 +512,7 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
         rows = fetch_source(dict(src), resolved_token if src['kind']=='vk' else '')
         added, matched, recent, rejected, archived, undated = 0, 0, 0, 0, 0, 0
         reviewable = 0
-        fresh_new_scores = []
+        target_new_scores = []
         for post in rows:
             candidate = classify(post.get('text',''))
             category = freshness(post.get('published_at', ''))
@@ -534,8 +538,12 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
             post_id, created = store_public_post(db, sid, post)
             if created and category in {'hot','fresh'}:
                 added += 1
-                fresh_new_scores.append(db.execute('SELECT score FROM public_posts WHERE id=?',
-                                                  (post_id,)).fetchone()[0])
+                new_post = db.execute("SELECT target_score,niche FROM public_posts WHERE id=?",
+                                      (post_id,)).fetchone()
+                prefs=preferences()
+                if new_post['niche'] in prefs.get('target_niches',DEFAULT_TARGET_NICHES):
+                    if new_post['target_score'] >= int(prefs.get('min_notification_score',60)):
+                        target_new_scores.append(new_post['target_score'])
         # Rejected posts are a *diagnostic* queue, not permanent leads.
         # Retain 7 days since discovery regardless of publication date.
         db.execute("""DELETE FROM public_posts WHERE review_status='filtered'
@@ -553,8 +561,8 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
                     last_archive=?,last_undated=? WHERE id=?""",
                    (iso_now(),len(rows),matched,rejected,reviewable,added,archived,undated,sid))
         db.commit()
-        if added:
-            notify_new_advertisers(added, src['name'], max(fresh_new_scores, default=0))
+        if target_new_scores:
+            notify_new_advertisers(len(target_new_scores), src['name'], max(target_new_scores))
         return {'read':len(rows),'matched':matched,'added':added,
                 'fresh_candidates':recent,'filtered':rejected,
                 'reviewable':reviewable,'archived':archived,'undated':undated}
@@ -638,7 +646,7 @@ class Handler(BaseHTTPRequestHandler):
                                             "interval_minutes": 1, "username": "Данил",
                                             "vk_token_saved": (DATA_DIR / 'vk_token.dpapi').is_file(),
                                             "vk_token_available": token_available(),
-                                            "preferences": preferences(),
+                                            "preferences": preferences(), "target_niche_names":NICHE_NAMES,
                                             "startup_enabled": is_startup_enabled(),
                                             "tray_available": bool(_tray and _tray.icon)})
             if path == "/api/update/check":
@@ -730,6 +738,12 @@ class Handler(BaseHTTPRequestHandler):
                     if not isinstance(score, int) or isinstance(score, bool) or not 0 <= score <= 100:
                         raise ValueError('Укажи оценку от 0 до 100')
                     fields['min_notification_score'] = score
+                if 'target_niches' in data:
+                    niches = data['target_niches']
+                    if not isinstance(niches,list) or not niches or len(niches)>len(NICHE_NAMES) or any(
+                        not isinstance(n,str) or n not in NICHE_NAMES for n in niches):
+                        raise ValueError('Выбери хотя бы одну подходящую нишу')
+                    fields['target_niches'] = list(dict.fromkeys(niches))
                 if 'startup' in data:
                     if not isinstance(data['startup'], bool):
                         raise ValueError('startup должен быть true или false')
