@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="theme-color" content="#f6f8fc">
+<title>VOID LEADS — Business Hunter</title><link rel="stylesheet" href="/style.css"></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+ <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/></symbol>
+ <symbol id="i-leads" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+ <symbol id="i-megaphone" viewBox="0 0 24 24"><path d="M3 11v2a2 2 0 0 0 2 2h2l2 5h3l-2-5h1c3 0 6 2 9 4V5c-3 2-6 4-9 4H5a2 2 0 0 0-2 2z"/></symbol>
+ <symbol id="i-map" viewBox="0 0 24 24"><path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.6"/></symbol>
+ <symbol id="i-partner" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><path d="M2.6 19v-2a5.4 5.4 0 0 1 10.8 0v2zM16 5a3 3 0 0 1 0 6M16.5 14c3.3 0 5 2 5 5"/></symbol>
+ <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+ <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.2"/><circle cx="16" cy="17" r="2.2"/></symbol>
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="7"/><path d="m16 16 5 5"/></symbol>
+ <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+ <symbol id="i-up" viewBox="0 0 24 24"><path d="M5 19 19 5M8 5h11v11"/></symbol>
+ <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-7-7 7 7-7 7"/></symbol>
+ <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+ <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4 10 14"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
+ <symbol id="i-close" viewBox="0 0 24 24"><path d="m5 5 14 14M19 5 5 19"/></symbol>
+ <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3.1 6.5 7.1 1-5.1 5 1.2 7-6.3-3.3-6.3 3.3 1.2-7-5.1-5 7.1-1z"/></symbol>
+ <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></symbol>
+ <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 .2l2-2a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7-.2l-2 2a5 5 0 0 0 7 7l2-2"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+ <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+ <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16zM13 7l4 4"/></symbol>
+ <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 4h6M6 7l1 13h10l1-13M10 11v5m4-5v5"/></symbol>
+ <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 16v4h16v-4"/></symbol>
+ <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5 10A8 8 0 0 1 19 8l1 4M4 12l1 4a8 8 0 0 0 14-2"/></symbol>
+ <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2 20 6v6c0 5-3.6 8-8 10-4.4-2-8-5-8-10V6zM9 12l2 2 4-4"/></symbol>
+ <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 4 18 4 18 0V5M3 12c0 4 18 4 18 0"/></symbol>
+ <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2h8l5 5v15H6zM14 2v6h5M9 13h7M9 17h7"/></symbol>
+ <symbol id="i-bolt" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-12h-7z"/></symbol>
+ <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
+ <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6 3h4l1 5-3 2c1 3 3 5 6 6l2-3 5 1v4a3 3 0 0 1-3 3C9 21 3 15 3 6a3 3 0 0 1 3-3z"/></symbol>
+ <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></symbol>
+ <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a16 16 0 0 1 0 18M12 3a16 16 0 0 0 0 18"/></symbol>
+ <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+</svg>
+<div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+<div class="app">
+<aside class="sidebar glass" id="sidebar">
+  <div class="logo-line"><span class="brand-icon">V<span>·</span></span><div><div class="brand-title">VOID <em>LEADS</em></div><small>CLIENT INTELLIGENCE</small></div></div>
+  <div class="space-label"><span class="pulse"></span> Моя рабочая среда <span class="space-beta">V 0.4.0</span></div>
+  <div class="nav-title">ПРОСТРАНСТВО</div>
+  <nav class="nav" id="nav">
+    <button class="nav-link active" data-view="dashboard"> <svg class="ic"><use href="#i-dashboard"/></svg> Обзор </button>
+    <button class="nav-link" data-view="public"><svg class="ic"><use href="#i-megaphone"/></svg> Public Hunter <span class="nav-badge" id="publicCount">0</span></button>
+    <button class="nav-link" data-view="leads"><svg class="ic"><use href="#i-leads"/></svg> База лидов <span class="nav-badge" id="navCount">0</span></button>
+    <div class="nav-title">НАПРАВЛЕНИЯ</div>
+    <button class="nav-link" data-view="ad"><svg class="ic"><use href="#i-plus"/></svg> Добавить рекламу</button>
+    <button class="nav-link" data-view="map"><svg class="ic"><use href="#i-map"/></svg> Map Hunter</button>
+    <button class="nav-link" data-view="partner"><svg class="ic"><use href="#i-partner"/></svg> Партнёры</button>
+    <button class="nav-link" data-view="request"><svg class="ic"><use href="#i-bolt"/></svg> Прямые запросы</button>
+    <div class="nav-title">АНАЛИТИКА</div>
+    <button class="nav-link" data-view="pipeline"><svg class="ic"><use href="#i-activity"/></svg> Воронка</button>
+    <button class="nav-link" data-view="settings"><svg class="ic"><use href="#i-settings"/></svg> Настройки</button>
+  </nav>
+  <div class="sidebar-foot"><div class="privacy-icon"><svg class="ic"><use href="#i-shield"/></svg></div><div><b>Твои данные — локально</b><small>Без внешней CRM и рассылок</small></div></div>
+</aside>
+<div class="main">
+  <header class="topbar glass"><button class="icon-button mobile-menu" id="menuBtn" aria-label="Открыть меню"><svg class="ic"><use href="#i-menu"/></svg></button>
+  <div class="crumb"><span>Workspace</span><span class="slash">/</span><strong id="currentPage">Обзор</strong></div>
+  <div class="top-actions"><label class="global-search"><svg class="ic"><use href="#i-search"/></svg><input id="search" placeholder="Поиск по компаниям..." autocomplete="off"></label><button class="btn primary" id="createLead"><svg class="ic"><use href="#i-plus"/></svg> Новый лид</button></div></header>
+  <main class="content" id="content"><div class="loading">Открываем рабочее пространство...</div></main>
+  <footer class="app-footer"><span><span class="pulse"></span> Локальное приложение · без платных API</span><span><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · VOID LEADS 0.4.0</span></footer>
+</div></div>
+<dialog class="dialog" id="leadDialog"><form id="leadForm"><div class="dialog-head"><div><div class="eyebrow">CRM / РЕДАКТОР</div><h2 id="leadDialogTitle">Новая компания</h2></div><button type="button" class="icon-button" data-close="leadDialog" aria-label="Закрыть"><svg class="ic"><use href="#i-close"/></svg></button></div><div class="form-grid">
+<label class="full">Название организации <input name="name" required maxlength="250" placeholder="Название бизнеса"></label>
+<label>Город <input name="city" placeholder="Например, Воронеж"></label><label>Ниша <select name="niche" id="leadNiche"></select></label>
+<label>Тип источника <select name="source_type"><option value="manual">Вручную</option><option value="ad">Реклама</option><option value="map">Карты</option><option value="partner">Партнёрство</option><option value="request">Запрос</option></select></label><label>Статус сайта <select name="website_status"><option value="unknown">Не проверен</option><option value="not_found">Не обнаружен</option><option value="found">Найден</option></select></label>
+<label>Телефон <input name="phone" placeholder="+7..."></label><label>Email <input name="email" placeholder="hello@company.ru"></label>
+<label class="full">Источник <input name="source_url" placeholder="https://..."></label><label class="full">Сайт <input name="website" placeholder="https://..."></label><label class="full">VK / Telegram <input name="social" placeholder="https://..."></label><label class="full">Описание <textarea name="description" rows="3" placeholder="Что предлагает компания"></textarea></label><label class="full">Мои заметки <textarea name="notes" rows="2"></textarea></label>
+<label>Потенциальный чек, ₽ <input name="potential_value" type="number" value="0" min="0"></label><label>Этап <select name="status" id="leadStatus"></select></label>
+</div><div class="dialog-actions"><button class="btn quiet" type="button" data-close="leadDialog">Отмена</button><button class="btn primary" type="submit">Сохранить компанию</button></div></form></dialog>
+<dialog class="dialog small-dialog" id="sourceDialog"><form id="sourceForm"><div class="dialog-head"><div><div class="eyebrow">PUBLIC HUNTER</div><h2>Добавить источник</h2></div><button class="icon-button" type="button" data-close="sourceDialog" aria-label="Закрыть"><svg class="ic"><use href="#i-close"/></svg></button></div><div class="form-grid single">
+<label>Название паблика <input name="name" required placeholder="Подслушано Тула"></label>
+<label>Город <input name="city" required placeholder="Тула"></label>
+<label>Способ получения <select name="kind" id="sourceKind"><option value="vk">VK — официальный API</option><option value="rss">RSS — городские сайты</option><option value="manual">Telegram / ручной импорт</option></select></label>
+<label id="sourceLocatorRow">Адрес источника <input name="locator" placeholder="https://vk.com/overhear.tula"></label><label>Проверять каждые (мин) <input name="interval_minutes" type="number" min="15" max="180" value="20" required></label>
+</div><p class="hint">VK требует ваш собственный токен API при проверке. Для RSS указывай разрешённый HTTPS-фид. Telegram-посты добавляются вручную.</p><div class="dialog-actions"><button type="button" class="btn quiet" data-close="sourceDialog">Отмена</button><button type="submit" class="btn primary">Добавить</button></div></form></dialog>
+<dialog class="dialog small-dialog" id="postDialog"><form id="postForm"><div class="dialog-head"><div><div class="eyebrow">PUBLIC HUNTER</div><h2>Добавить публикацию</h2></div><button class="icon-button" type="button" data-close="postDialog" aria-label="Закрыть"><svg class="ic"><use href="#i-close"/></svg></button></div><div class="form-grid single"><label>Источник <select name="source_id" id="postSource" required></select></label><label>Ссылка на пост (необязательно) <input name="url" placeholder="https://..."></label><label>Когда опубликовано <input name="published_at" id="postPublished" type="datetime-local"><small>Если время неизвестно — очисти поле: пост не считается свежим.</small></label><label>Текст публикации <textarea name="text" rows="7" required placeholder="Вставь опубликованное объявление..." ></textarea></label></div><div class="dialog-actions"><button type="button" class="btn quiet" data-close="postDialog">Отмена</button><button class="btn primary" type="submit">Проверить и добавить</button></div></form></dialog>
+<dialog class="dialog small-dialog" id="reviewDialog"><form id="reviewForm"><div class="dialog-head"><div><div class="eyebrow">ПРОВЕРКА БИЗНЕСА</div><h2>Сохранить как лид</h2></div><button class="icon-button" type="button" data-close="reviewDialog" aria-label="Закрыть"><svg class="ic"><use href="#i-close"/></svg></button></div><p class="hint">Проверь название компании по первоисточнику. Автоматическая подсказка может ошибаться.</p><label class="field">Название бизнеса <input name="name" id="reviewName" required minlength="2"></label><div class="dialog-actions"><button type="button" class="btn quiet" data-close="reviewDialog">Отмена</button><button class="btn primary" type="submit">Добавить в CRM</button></div></form></dialog>
+<div id="toasts" role="status" aria-live="polite"></div><script src="/app.js" defer></script></body></html>
