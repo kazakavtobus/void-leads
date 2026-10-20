@@ -19,6 +19,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
+from update_state import write_status
 from urllib.parse import urlparse
 
 from release_config import RELEASE_REPO
@@ -108,18 +109,33 @@ def show_error(message: str):
         print(message, file=sys.stderr)
 
 
+def ask_running_app_to_close(port: int, key: str):
+    """Only the authorized updater can shut down its parent after verification."""
+    if not 1 <= port <= 65535 or len(key) < 24:
+        raise ValueError('Неверные параметры завершения приложения')
+    req = Request(f'http://127.0.0.1:{port}/api/update/shutdown',
+                  data=b'{}', method='POST',
+                  headers={'Content-Type':'application/json','X-Update-Key':key})
+    with urlopen(req,timeout=12) as response:
+        if response.status != 200:
+            raise RuntimeError('Старая версия не подтвердила закрытие')
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--pid', type=int, required=True)
     parser.add_argument('--app', required=True)
+    parser.add_argument('--port', type=int, required=True)
+    parser.add_argument('--shutdown-key', required=True)
     args = parser.parse_args()
     if os.name != 'nt' or not REPO_RE.fullmatch(RELEASE_REPO):
         raise RuntimeError('Обновление доступно только в установленной Windows-версии с настроенным каналом')
     target = Path(args.app).resolve()
     if target.name.lower() != 'void-leads.exe':
         raise ValueError('Некорректный путь приложения')
+    write_status(DATA_DIR,'downloading','Проверяем релиз и загружаем установщик…')
     release = latest_release()
     if not release.get('available'):
+        write_status(DATA_DIR,'idle','Установлена актуальная версия')
         log('Нет новых выпусков')
         return
     version = release['latest']
@@ -136,21 +152,30 @@ def main():
         if actual.lower() != expected:
             raise ValueError('Контрольная сумма установщика не совпала. Обновление отменено.')
         log(f'Загружена версия {version}; SHA256 подтверждён')
-        wait_for_windows_pid(args.pid)
+        write_status(DATA_DIR,'verified','Контрольная сумма совпала')
+        write_status(DATA_DIR,'backing_up','Создаём резервную копию базы…')
         backup = backup_database()
         log('Резервная копия базы: ' + str(backup))
-        process = subprocess.run([str(installer), '/SILENT', '/SUPPRESSMSGBOXES',
+        write_status(DATA_DIR,'closing','Закрываем старую версию…')
+        ask_running_app_to_close(args.port,args.shutdown_key)
+        wait_for_windows_pid(args.pid)
+        write_status(DATA_DIR,'installing','Устанавливаем новую версию…')
+        process = subprocess.run([str(installer), '/VERYSILENT', '/SUPPRESSMSGBOXES',
                                   '/NORESTART', '/CLOSEAPPLICATIONS'], timeout=360)
         if process.returncode != 0:
             raise RuntimeError(f'Установщик завершился с кодом {process.returncode}')
         log('Установлена версия ' + version)
+    write_status(DATA_DIR,'done','Новая версия установлена — открываем VOID LEADS')
     if target.is_file():
         subprocess.Popen([str(target)], cwd=str(target.parent), close_fds=True)
+    else:
+        raise FileNotFoundError('Новая версия программы не найдена после установки')
 
 
 if __name__ == '__main__':
     try:
         main()
     except Exception as exc:
+        write_status(DATA_DIR,'failed',str(exc))
         show_error(str(exc))
         sys.exit(1)
