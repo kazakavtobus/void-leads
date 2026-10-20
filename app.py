@@ -589,6 +589,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/":
                 return self.send_file(STATIC / "index.html")
+            if path == "/favicon.ico":
+                return self.send_file(ROOT / "assets" / "void-leads.ico")
             if path in {"/app.js", "/style.css"}:
                 return self.send_file(STATIC / path.lstrip("/"))
             if path == "/api/config":
@@ -653,7 +655,7 @@ class Handler(BaseHTTPRequestHandler):
         self.write_route("DELETE")
 
     def write_route(self, method):
-        global _last_osm_request
+        global _last_osm_request, _session_vk_token
         path = urlparse(self.path).path
         parts = path.strip("/").split("/")
         # Avoid localhost cross-site form/posts and DNS rebinding surprises.
@@ -665,10 +667,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {"error": "Недопустимый источник запроса"})
         try:
             data = {} if method == "DELETE" else self.read_body()
+            if path == '/api/notifications/test' and method == 'POST':
+                available=bool(_tray and _tray.notify("VOID LEADS · проверка",
+                    "Данил, уведомления на твоём компьютере работают!"))
+                return self.send_json(200, {'ok':available})
             if path == '/api/vk/token' and method == 'POST':
                 token = str(data.get('token','')).strip()
                 save_token(DATA_DIR,token)
-                global _session_vk_token
                 _session_vk_token = token
                 return self.send_json(200, {'ok': True, 'saved': True})
             if path == '/api/vk/token' and method == 'DELETE':
