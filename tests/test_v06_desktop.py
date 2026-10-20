@@ -37,7 +37,7 @@ def test_legacy_source_interval_migrates_once(tmp_path,monkeypatch):
     app.init_db(seed=False)
     with app.db_connection() as db:
         sid,_=app.add_public_source(db,dict(name='Old',city='Тула',kind='vk',
-                    locator='overhear.tula','interval_minutes':20))
+                    locator='overhear.tula',interval_minutes=20))
         db.execute("DELETE FROM app_meta WHERE key='one_minute_checks'")
         db.commit()
     app.init_db(seed=False)
