@@ -193,7 +193,7 @@ async function handleAction(element){const a=element.dataset.action;const id=ele
   toast(result.ok?'Проверь уведомление Windows':'Уведомление не отправилось — проверь настройки Windows',!result.ok);return;
  }
  if(a==='new-lead')return editModal();if(a==='import-sources')return doImportSources();if(a==='edit-lead')return editModal(state.detail);if(a==='open-source'){return openModal('sourceDialog');}
- if(a==='open-post'){if(!state.sources.length)return toast('Сначала добавь источник',true);$('#postForm').reset();$('#postSource').innerHTML=state.sources.map(s=>`<option value="${s.id}" ${Number(element.dataset.source)===s.id?'selected':''}>${esc(s.name)} (${esc(s.city)})</option>`).join('');return openModal('postDialog');}
+ if(a==='open-post'){if(!state.sources.length)return toast('Сначала добавь источник',true);$('#postForm').reset();$('#manualPostSource').innerHTML=state.sources.map(s=>`<option value="${s.id}" ${Number(element.dataset.source)===s.id?'selected':''}>${esc(s.name)} (${esc(s.city)})</option>`).join('');return openModal('postDialog');}
  if(a==='check-all'){
   const candidates=state.sources.filter(s=>s.kind!=='manual'&&s.enabled).slice(0,15);
   const token=$('#vkToken')?.value||'';let added=0,checked=0,errors=[];element.disabled=true;
