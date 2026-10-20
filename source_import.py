@@ -42,11 +42,11 @@ def validate_source(row):
     enabled_raw = norm(str(row.get('enabled', '1')))
     enabled = 0 if enabled_raw in {'0','нет','no','false','off'} else 1
     try:
-        interval = int(row.get('interval_minutes') or 20)
+        interval = int(row.get('interval_minutes') or 1)
     except (TypeError, ValueError):
         raise ValueError('Интервал должен быть числом минут')
-    if interval < 15 or interval > 180:
-        raise ValueError('Интервал — от 15 до 180 минут')
+    if interval < 1 or interval > 180:
+        raise ValueError('Интервал — от 1 до 180 минут')
     return dict(name=name, city=city, kind=kind, locator=locator, enabled=enabled, interval_minutes=interval)
 
 
@@ -81,6 +81,6 @@ def template_csv():
     output = io.StringIO()
     w = csv.writer(output, delimiter=';', lineterminator='\r\n')
     w.writerow(['Название', 'Город', 'Тип', 'Адрес', 'Активен', 'Интервал'])
-    w.writerow(['Подслушано в Туле','Тула','vk','https://vk.com/overhear.tula','1','20'])
-    w.writerow(['Подслушано в Туле · Telegram','Тула','telegram','https://t.me/pdstula','1','20'])
+    w.writerow(['Подслушано в Туле','Тула','vk','https://vk.com/overhear.tula','1','1'])
+    w.writerow(['Подслушано в Туле · Telegram','Тула','telegram','https://t.me/pdstula','1','1'])
     return '\ufeff' + output.getvalue()
