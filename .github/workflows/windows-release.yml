@@ -24,7 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tools
-        run: python -m pip install --upgrade pip pytest pyinstaller
+        run: python -m pip install --upgrade pip pytest pyinstaller pillow pystray
 
       - name: Run tests
         run: python -m pytest -q
@@ -52,10 +52,13 @@ jobs:
         shell: pwsh
         run: python packaging/prepare_release.py --repo "${{ github.repository }}" --tag "${{ steps.version.outputs.tag }}"
 
+      - name: Generate Windows app icon
+        run: python packaging/make_icon.py
+
       - name: Compile app and updater
         shell: pwsh
         run: |
-          python -m PyInstaller --clean --noconfirm --onefile --windowed --name VOID-Leads --add-data "static;static" app.py
+          python -m PyInstaller --clean --noconfirm --onefile --windowed --name VOID-Leads --icon assets/void-leads.ico --add-data "static;static" --add-data "assets;assets" --hidden-import pystray._win32 app.py
           python -m PyInstaller --clean --noconfirm --onefile --windowed --name VOID-Updater updater.py
           if (!(Test-Path dist/VOID-Leads.exe) -or !(Test-Path dist/VOID-Updater.exe)) { throw "Executable missing" }
 
