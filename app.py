@@ -662,9 +662,23 @@ class Handler(BaseHTTPRequestHandler):
                     return self.wfile.write(payload)
                 if path == "/api/public/sources":
                     sources = [dict(r) for r in db.execute("SELECT * FROM public_sources ORDER BY id DESC")]
+                    now = publication_time(iso_now())
+                    seven_days = now - timedelta(days=7)
+                    prefs=preferences()
+                    threshold=int(prefs.get('min_notification_score',60))
+                    selected=set(prefs.get('target_niches',DEFAULT_TARGET_NICHES))
                     for source in sources:
-                        stamps = db.execute("SELECT published_at FROM public_posts WHERE source_id=? AND review_status='new'", (source['id'],)).fetchall()
-                        source['new_posts'] = sum(freshness(p['published_at']) in {'hot','fresh'} for p in stamps)
+                        posts = [dict(r) for r in db.execute(
+                            """SELECT published_at,created_at,target_score,niche,review_status
+                               FROM public_posts WHERE source_id=?""",(source['id'],)).fetchall()]
+                        source['new_posts'] = sum(p['review_status']=='new' and
+                            freshness(p['published_at']) in {'hot','fresh'} for p in posts)
+                        weekly = [p for p in posts if p['review_status'] in {'new','converted'}
+                            and publication_time(p['created_at']) and publication_time(p['created_at'])>=seven_days
+                            and publication_time(p['published_at']) and publication_time(p['published_at'])>=seven_days]
+                        source['ads_7d']=len(weekly)
+                        source['targets_7d']=sum(p['target_score']>=threshold and
+                                                 p['niche'] in selected for p in weekly)
                     return self.send_json(200, sources)
                 if path == "/api/public/posts":
                     return self.send_json(200, public_post_rows(db, query.get('status',['fresh'])[0]))
