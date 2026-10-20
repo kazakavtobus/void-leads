@@ -114,3 +114,15 @@
 @media(prefers-reduced-motion:reduce){
  .public-toggle-track,.public-toggle-track>span,.target-pill-label,.target-settings-chevron{transition:none}
 }
+
+/* Seamless updater — quiet, readable light-glass state */
+.update-overlay{position:fixed;z-index:9999;inset:0;background:rgba(236,243,255,.89);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);display:grid;place-items:center;padding:22px}
+.update-overlay-card{width:min(100%,450px);text-align:center;border-radius:25px;padding:39px 32px;background:rgba(255,255,255,.88);border:1px solid #fff;box-shadow:0 30px 90px #284a8b24;display:flex;align-items:center;flex-direction:column;gap:14px}
+.update-overlay-card strong{font-size:24px;line-height:1.25;color:#273954;letter-spacing:-.6px}
+.update-overlay-card p{margin:0;color:#596b83;font-size:16px;line-height:1.6}
+.update-overlay-card small{color:#7d8ca2;font-size:14px;line-height:1.5}
+.update-overlay-icon{width:62px;height:62px;border-radius:21px;background:linear-gradient(145deg,#7aa3ff,#4f7cff);color:#fff;display:grid;place-items:center;font-size:31px;font-weight:800;box-shadow:0 12px 25px #4f7cff42}
+.update-progress-track{width:100%;height:6px;background:#e4ebf9;border-radius:999px;overflow:hidden}
+.update-progress-track span{display:block;width:35%;height:100%;background:#4f7cff;border-radius:999px;animation:update-shimmer 1.5s ease-in-out infinite alternate}
+@keyframes update-shimmer{from{transform:translateX(-100%)}to{transform:translateX(330%)}}
+@media(prefers-reduced-motion:reduce){.update-progress-track span{animation:none;width:100%}}
