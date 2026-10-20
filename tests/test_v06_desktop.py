@@ -69,6 +69,8 @@ def test_notify_fires_only_for_new_and_above_threshold(tmp_path,monkeypatch):
 
 def test_vk_token_not_in_plaintext_app_settings(tmp_path,monkeypatch):
     monkeypatch.setattr(app,'DATA_DIR',tmp_path)
+    monkeypatch.setattr(app,'_session_vk_token','')
+    monkeypatch.delenv('VOID_VK_TOKEN',raising=False)
     assert not app.token_available()
     if os.name=='nt':
         token='vk1.a-safe-test-service-token-'+'x'*30
