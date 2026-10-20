@@ -13,6 +13,7 @@ import threading
 import time
 import webbrowser
 from contextlib import closing
+from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -98,12 +99,36 @@ def init_db(seed: bool = True):
             "last_attempt": "TEXT NOT NULL DEFAULT ''",
             "last_error": "TEXT NOT NULL DEFAULT ''",
             "last_count": "INTEGER NOT NULL DEFAULT 0",
+            "last_matched": "INTEGER NOT NULL DEFAULT 0",
+            "last_filtered": "INTEGER NOT NULL DEFAULT 0",
+            "last_added": "INTEGER NOT NULL DEFAULT 0",
+            "last_archive": "INTEGER NOT NULL DEFAULT 0",
+            "last_undated": "INTEGER NOT NULL DEFAULT 0",
         }.items():
             if field not in columns:
                 db.execute(f"ALTER TABLE public_sources ADD COLUMN {field} {ddl}")
         columns_posts = {r[1] for r in db.execute('PRAGMA table_info(public_posts)')}
         if 'promoted' not in columns_posts:
             db.execute('ALTER TABLE public_posts ADD COLUMN promoted INTEGER NOT NULL DEFAULT 0')
+        for field, ddl in {
+            "analysis_reason": "TEXT NOT NULL DEFAULT ''",
+            "classifier_version": "INTEGER NOT NULL DEFAULT 0",
+            "manual_override": "INTEGER NOT NULL DEFAULT 0",
+        }.items():
+            if field not in columns_posts:
+                db.execute(f"ALTER TABLE public_posts ADD COLUMN {field} {ddl}")
+        # One-time reclassification of old findings: move false positives out of
+        # the fresh queue without touching CRM leads or previously reviewed posts.
+        for old in db.execute("""SELECT id,text,review_status,manual_override
+                                 FROM public_posts WHERE classifier_version<2""").fetchall():
+            result = classify(old['text'])
+            status = ('filtered' if old['review_status']=='new'
+                      and not result['is_candidate'] and not old['manual_override']
+                      else old['review_status'])
+            db.execute("""UPDATE public_posts SET score=?, niche=?,
+                          analysis_reason=?, review_status=?, classifier_version=2
+                          WHERE id=?""",
+                       (result['ad_score'],result['niche'],result['reason'],status,old['id']))
         db.execute("CREATE INDEX IF NOT EXISTS public_posts_published ON public_posts(published_at)")
         # Legacy RSS dates may be RFC822 text. Normalize for stable UTC comparisons.
         for r in db.execute("SELECT id,published_at FROM public_posts WHERE published_at != ''"):
@@ -305,11 +330,16 @@ def store_public_post(db, source_id: int, data: dict):
     row = db.execute("SELECT id FROM public_posts WHERE source_id=? AND external_id=?", (source_id, external)).fetchone()
     if row:
         return row[0], False
+    # VK "marked_as_ads" is not enough: news may also be promoted.
+    is_ad = analysis["is_candidate"]
+    score = min(100, analysis["ad_score"] + (7 if data.get("marked_as_ads") and is_ad else 0))
     cur = db.execute("""INSERT INTO public_posts(source_id,external_id,source_url,text,published_at,
-        score,niche,suggested_name,created_at,promoted) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+        score,niche,suggested_name,created_at,promoted,review_status,analysis_reason,classifier_version)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (source_id,external,url,text,iso_publication(data.get("published_at", "")),
-         min(100, analysis["ad_score"]+ (12 if data.get('marked_as_ads') else 0)),
-         analysis["niche"],analysis["suggested_name"],iso_now(),int(bool(data.get('marked_as_ads')))))
+         score,analysis["niche"],analysis["suggested_name"],iso_now(),
+         int(bool(data.get("marked_as_ads"))), 'new' if is_ad else 'filtered',
+         analysis['reason'],2))
     return cur.lastrowid, True
 
 
@@ -328,7 +358,7 @@ def public_post_rows(db, mode='fresh'):
             continue
         if mode == 'undated' and not (post['review_status']=='new' and post['freshness']=='undated'):
             continue
-        if mode in {'new','converted','ignored'} and post['review_status']!=mode:
+        if mode in {'new','converted','ignored','filtered'} and post['review_status']!=mode:
             continue
         values.append(post)
         if len(values) >= 500:
@@ -341,8 +371,10 @@ def public_post_rows(db, mode='fresh'):
 
 def public_post_counts(db):
     rows = db.execute('SELECT published_at,review_status FROM public_posts').fetchall()
-    out = {'fresh':0, 'hot':0, 'archive':0, 'undated':0, 'converted':0, 'all':len(rows)}
+    out = {'fresh':0, 'hot':0, 'archive':0, 'undated':0, 'converted':0, 'filtered':0, 'all':len(rows)}
     for row in rows:
+        if row['review_status']=='filtered':
+            out['filtered'] += 1
         if row['review_status']=='converted':
             out['converted'] += 1
         if row['review_status']=='new':
@@ -388,21 +420,41 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
     db.commit()
     try:
         rows = fetch_source(dict(src), resolved_token if src['kind']=='vk' else '')
-        added, matched, recent = 0, 0, 0
+        added, matched, recent, rejected, archived, undated = 0, 0, 0, 0, 0, 0
+        samples = 0
         for post in rows:
             candidate = classify(post.get('text',''))
-            if not candidate['is_candidate'] and not post.get('marked_as_ads'):
+            category = freshness(post.get('published_at', ''))
+            if not candidate['is_candidate']:
+                rejected += 1
+                # Keep a *small, reviewable* sample of fresh rejections,
+                # never a full archive of the news feed.
+                if category in {'hot','fresh'} and samples < 10:
+                    store_public_post(db, sid, post)
+                    samples += 1
                 continue
             matched += 1
-            category = freshness(post.get('published_at', ''))
-            # Archive old observations for deduplication, but never show as fresh.
+            if category in {'hot','fresh'}:
+                recent += 1
+            elif category == 'archive':
+                archived += 1
+            else:
+                undated += 1
+            # Archive older advertiser posts for duplicate/repeat-ad history.
             _, created = store_public_post(db, sid, post)
             added += bool(created and category in {'hot','fresh'})
-            recent += category in {'hot','fresh'}
-        db.execute("""UPDATE public_sources SET last_checked=?,last_error='',last_count=? WHERE id=?""",
-                   (iso_now(),len(rows),sid))
+        # Rejected samples are not CRM entries; prune after seven days.
+        db.execute("""DELETE FROM public_posts WHERE review_status='filtered'
+                      AND created_at < ?""",
+                   ((publication_time(iso_now()) - timedelta(days=7)).isoformat(),))
+        db.execute("""UPDATE public_sources SET last_checked=?,last_error='',last_count=?,
+                    last_matched=?,last_filtered=?,last_added=?,
+                    last_archive=?,last_undated=? WHERE id=?""",
+                   (iso_now(),len(rows),matched,rejected,added,archived,undated,sid))
         db.commit()
-        return {'read':len(rows),'matched':matched,'added':added,'fresh_candidates':recent}
+        return {'read':len(rows),'matched':matched,'added':added,
+                'fresh_candidates':recent,'filtered':rejected,
+                'archived':archived,'undated':undated}
     except Exception as exc:
         db.execute('UPDATE public_sources SET last_error=? WHERE id=?', (str(exc)[:400],sid))
         db.commit()
@@ -432,7 +484,7 @@ def auto_check_loop(stop_event):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "VOIDLeads/0.4"
+    server_version = "VOIDLeads/0.5"
 
     def log_message(self, format, *args):
         pass
@@ -615,6 +667,16 @@ class Handler(BaseHTTPRequestHandler):
                     db.execute("UPDATE public_posts SET review_status='ignored' WHERE id=? AND review_status='new'", (int(parts[3]),))
                     db.commit()
                     return self.send_json(200, {"ok": True})
+                if len(parts) == 5 and parts[:3] == ["api", "public", "posts"] and parts[3].isdigit() and parts[4] == "restore" and method == "POST":
+                    # A user can rescue a false negative; never silently
+                    # override this decision on next database migration.
+                    result=db.execute("""UPDATE public_posts SET review_status='new',
+                        manual_override=1,analysis_reason='Восстановлено вручную'
+                        WHERE id=? AND review_status='filtered'""", (int(parts[3]),))
+                    if not result.rowcount:
+                        raise ValueError('Публикация уже обработана или не найдена')
+                    db.commit()
+                    return self.send_json(200, {'ok': True})
                 if len(parts) == 5 and parts[:3] == ["api", "public", "posts"] and parts[3].isdigit() and parts[4] == "convert" and method == "POST":
                     pk = int(parts[3])
                     post = db.execute("""SELECT p.*,s.city,s.name AS source_name FROM public_posts p
