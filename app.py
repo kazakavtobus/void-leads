@@ -483,6 +483,7 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
         rows = fetch_source(dict(src), resolved_token if src['kind']=='vk' else '')
         added, matched, recent, rejected, archived, undated = 0, 0, 0, 0, 0, 0
         samples = 0
+        fresh_new_scores = []
         for post in rows:
             candidate = classify(post.get('text',''))
             category = freshness(post.get('published_at', ''))
@@ -502,8 +503,11 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
             else:
                 undated += 1
             # Archive older advertiser posts for duplicate/repeat-ad history.
-            _, created = store_public_post(db, sid, post)
-            added += bool(created and category in {'hot','fresh'})
+            post_id, created = store_public_post(db, sid, post)
+            if created and category in {'hot','fresh'}:
+                added += 1
+                fresh_new_scores.append(db.execute('SELECT score FROM public_posts WHERE id=?',
+                                                  (post_id,)).fetchone()[0])
         # Rejected samples are not CRM entries; prune after seven days.
         db.execute("""DELETE FROM public_posts WHERE review_status='filtered'
                       AND created_at < ?""",
@@ -514,9 +518,7 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
                    (iso_now(),len(rows),matched,rejected,added,archived,undated,sid))
         db.commit()
         if added:
-            latest_score = max((p['score'] for p in public_post_rows(db, mode='fresh')
-                                if p['source_id']==sid), default=0)
-            notify_new_advertisers(added, src['name'], latest_score)
+            notify_new_advertisers(added, src['name'], max(fresh_new_scores, default=0))
         return {'read':len(rows),'matched':matched,'added':added,
                 'fresh_candidates':recent,'filtered':rejected,
                 'archived':archived,'undated':undated}
