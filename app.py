@@ -14,6 +14,9 @@ import time
 import webbrowser
 from contextlib import closing
 from datetime import timedelta
+import math
+from secure_store import save_token, load_token, delete_token
+from windows_shell import Tray, is_startup_enabled, set_startup
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -33,7 +36,56 @@ DATA_DIR = Path(os.environ.get("VOID_LEADS_DATA", str(Path.home() / "VOID-LEADS"
 DB_PATH = DATA_DIR / "leads.sqlite3"
 _lock = threading.RLock()
 _last_osm_request = 0.0
-_session_vk_token = ""  # only in RAM until the app exits; never written to disk
+_session_vk_token = ""  # RAM, or recoverable via Windows DPAPI on opted-in devices
+_tray = None
+_server = None
+PREFS_DEFAULT = {"notifications": True, "min_notification_score": 55}
+
+def preferences():
+    p = DATA_DIR / "settings.json"
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return PREFS_DEFAULT.copy()
+        return {**PREFS_DEFAULT, **{k:raw[k] for k in PREFS_DEFAULT if k in raw}}
+    except (FileNotFoundError, ValueError, OSError):
+        return PREFS_DEFAULT.copy()
+
+def save_preferences(**fields):
+    current = preferences()
+    current.update({k:v for k,v in fields.items() if k in PREFS_DEFAULT})
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    p = DATA_DIR / "settings.json"
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(current, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(p)
+    return current
+
+def token_available():
+    return bool(_session_vk_token or os.environ.get("VOID_VK_TOKEN") or
+                (DATA_DIR / "vk_token.dpapi").is_file())
+
+def authorized_vk_token():
+    if _session_vk_token:
+        return _session_vk_token
+    if os.environ.get("VOID_VK_TOKEN"):
+        return os.environ["VOID_VK_TOKEN"]
+    try:
+        return load_token(DATA_DIR)
+    except (ValueError, OSError, RuntimeError):
+        return ""
+
+def notify_new_advertisers(count, source_name, latest_score):
+    if not count or not preferences()["notifications"]:
+        return False
+    if latest_score < int(preferences()["min_notification_score"]):
+        return False
+    tray = _tray
+    if not tray:
+        return False
+    return tray.notify("VOID LEADS · новые рекламодатели",
+                       f"{source_name}: {count} новых объявлений. Открой Public Hunter.")
+
 
 
 def db_connection():
@@ -130,6 +182,12 @@ def init_db(seed: bool = True):
                           WHERE id=?""",
                        (result['ad_score'],result['niche'],result['reason'],status,old['id']))
         db.execute("CREATE INDEX IF NOT EXISTS public_posts_published ON public_posts(published_at)")
+        db.execute("""CREATE TABLE IF NOT EXISTS app_meta (
+            key TEXT PRIMARY KEY, value TEXT NOT NULL
+        )""")
+        if not db.execute("SELECT 1 FROM app_meta WHERE key='one_minute_checks'").fetchone():
+            db.execute("UPDATE public_sources SET interval_minutes=1 WHERE interval_minutes=20")
+            db.execute("INSERT INTO app_meta(key,value) VALUES('one_minute_checks','yes')")
         # Legacy RSS dates may be RFC822 text. Normalize for stable UTC comparisons.
         for r in db.execute("SELECT id,published_at FROM public_posts WHERE published_at != ''"):
             new_value = iso_publication(r['published_at'])
@@ -411,11 +469,13 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
         raise ValueError('Ручной источник заполняется через форму')
     if not bypass_cooldown and src['last_attempt']:
         last = publication_time(src['last_attempt'])
-        if last and (publication_time(iso_now())-last).total_seconds()<90:
-            raise ValueError('Повторная проверка этого паблика доступна через 90 секунд')
-    resolved_token = token or _session_vk_token or os.environ.get('VOID_VK_TOKEN','')
+        if last:
+            remaining = 60 - (publication_time(iso_now())-last).total_seconds()
+            if remaining > 0:
+                raise ValueError(f'Повторная проверка через {math.ceil(remaining)} сек.')
+    resolved_token = token or authorized_vk_token()
     if src['kind']=='vk' and token:
-        _session_vk_token = token  # RAM only, for checking while app is running
+        _session_vk_token = token  # manual input stays in RAM until saved explicitly
     db.execute('UPDATE public_sources SET last_attempt=? WHERE id=?', (iso_now(),sid))
     db.commit()
     try:
@@ -452,6 +512,10 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
                     last_archive=?,last_undated=? WHERE id=?""",
                    (iso_now(),len(rows),matched,rejected,added,archived,undated,sid))
         db.commit()
+        if added:
+            latest_score = max((p['score'] for p in public_post_rows(db, mode='fresh')
+                                if p['source_id']==sid), default=0)
+            notify_new_advertisers(added, src['name'], latest_score)
         return {'read':len(rows),'matched':matched,'added':added,
                 'fresh_candidates':recent,'filtered':rejected,
                 'archived':archived,'undated':undated}
@@ -463,16 +527,16 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
 
 def auto_check_loop(stop_event):
     # Checks permissioned feeds at a configured interval while the app is running.
-    while not stop_event.wait(45):
+    while not stop_event.wait(10):
         try:
             with _lock, closing(db_connection()) as db:
                 rows = db.execute("SELECT * FROM public_sources WHERE enabled=1 AND kind IN ('vk','rss') ORDER BY last_attempt ASC, id ASC").fetchall()
                 now = publication_time(iso_now())
                 for s in rows:
-                    if s['kind']=='vk' and not (_session_vk_token or os.environ.get('VOID_VK_TOKEN')):
+                    if s['kind']=='vk' and not authorized_vk_token():
                         continue
                     last = publication_time(s['last_attempt'])
-                    if last and (now-last).total_seconds()<max(15,s['interval_minutes'])*60:
+                    if last and (now-last).total_seconds()<max(1,s['interval_minutes'])*60:
                         continue
                     try:
                         check_public_source(db, s['id'], bypass_cooldown=True)
@@ -484,7 +548,7 @@ def auto_check_loop(stop_event):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "VOIDLeads/0.5"
+    server_version = "VOIDLeads/0.6"
 
     def log_message(self, format, *args):
         pass
@@ -529,7 +593,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_file(STATIC / path.lstrip("/"))
             if path == "/api/config":
                 return self.send_json(200, {"cities": list(CITIES), "map_categories": list(CATEGORIES),
-                                            "niches": NICHES, "version": APP_VERSION, "fresh_hours": 24, "hot_hours": 2, "interval_minutes": 20})
+                                            "niches": NICHES, "version": APP_VERSION, "fresh_hours": 24, "hot_hours": 2,
+                                            "interval_minutes": 1, "username": "Данил",
+                                            "vk_token_saved": (DATA_DIR / 'vk_token.dpapi').is_file(),
+                                            "vk_token_available": token_available(),
+                                            "preferences": preferences(),
+                                            "startup_enabled": is_startup_enabled(),
+                                            "tray_available": bool(_tray and _tray.icon)})
             if path == "/api/update/check":
                 return self.send_json(200, latest_release())
             with closing(db_connection()) as db:
@@ -595,6 +665,33 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {"error": "Недопустимый источник запроса"})
         try:
             data = {} if method == "DELETE" else self.read_body()
+            if path == '/api/vk/token' and method == 'POST':
+                token = str(data.get('token','')).strip()
+                save_token(DATA_DIR,token)
+                global _session_vk_token
+                _session_vk_token = token
+                return self.send_json(200, {'ok': True, 'saved': True})
+            if path == '/api/vk/token' and method == 'DELETE':
+                delete_token(DATA_DIR)
+                _session_vk_token = ''
+                return self.send_json(200, {'ok': True, 'saved': False})
+            if path == '/api/preferences' and method == 'POST':
+                fields = {}
+                if 'notifications' in data:
+                    if not isinstance(data['notifications'], bool):
+                        raise ValueError('notifications должен быть true или false')
+                    fields['notifications'] = data['notifications']
+                if 'min_notification_score' in data:
+                    score = data['min_notification_score']
+                    if not isinstance(score, int) or isinstance(score, bool) or not 0 <= score <= 100:
+                        raise ValueError('Укажи оценку от 0 до 100')
+                    fields['min_notification_score'] = score
+                if 'startup' in data:
+                    if not isinstance(data['startup'], bool):
+                        raise ValueError('startup должен быть true или false')
+                    set_startup(data['startup'])
+                return self.send_json(200, {'ok':True, 'preferences':save_preferences(**fields),
+                                            'startup_enabled':is_startup_enabled()})
             if path == '/api/update/install' and method == 'POST':
                 if os.name != 'nt' or not getattr(sys, 'frozen', False):
                     raise ValueError('Установка обновлений доступна только из установленной Windows-версии')
@@ -805,14 +902,20 @@ def launch_ui(url):
 
 
 def serve(port=8765, open_browser=True):
+    global _tray, _server
     init_db()
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError:
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     actual_port = server.server_address[1]
+    _server = server
     url = f"http://127.0.0.1:{actual_port}"
     print(f"VOID LEADS открыт: {url}\nДанные: {DB_PATH}\nCtrl+C — остановить")
+    if os.name == 'nt' and getattr(sys,'frozen',False):
+        _tray = Tray(lambda: launch_ui(url), lambda: threading.Thread(
+            target=server.shutdown,daemon=True).start(), ROOT / "assets" / "void-leads.png")
+        _tray.start()
     if open_browser:
         threading.Timer(0.8, lambda: launch_ui(url)).start()
     stop_background = threading.Event()
@@ -824,6 +927,8 @@ def serve(port=8765, open_browser=True):
         pass
     finally:
         stop_background.set()
+        if _tray:
+            _tray.stop()
         server.server_close()
 
 
