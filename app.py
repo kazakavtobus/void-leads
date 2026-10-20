@@ -39,6 +39,7 @@ _last_osm_request = 0.0
 _session_vk_token = ""  # RAM, or recoverable via Windows DPAPI on opted-in devices
 _tray = None
 _server = None
+_single_mutex = None
 PREFS_DEFAULT = {"notifications": True, "min_notification_score": 55}
 
 def preferences():
@@ -907,7 +908,24 @@ def launch_ui(url):
 
 
 def serve(port=8765, open_browser=True):
-    global _tray, _server
+    global _tray, _server, _single_mutex
+    # A background copy may already exist in the tray; avoid a second server
+    # and concurrent VK API checks when the desktop shortcut is clicked.
+    if os.name == 'nt' and getattr(sys,'frozen',False):
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.WinDLL("kernel32",use_last_error=True)
+        kernel32.CreateMutexW.argtypes = [ctypes.c_void_p,wintypes.BOOL,wintypes.LPCWSTR]
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+        handle = kernel32.CreateMutexW(None,False,"Local\\VOID-LEADS-_SINGLE-APP")
+        if not handle:
+            raise OSError(ctypes.get_last_error(),"Не удалось запустить VOID LEADS")
+        if ctypes.get_last_error()==183:  # ERROR_ALREADY_EXISTS
+            kernel32.CloseHandle(handle)
+            if open_browser:
+                launch_ui(f"http://127.0.0.1:{port}/")
+            return
+        _single_mutex = handle
     init_db()
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
