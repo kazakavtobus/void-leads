@@ -1,6 +1,8 @@
 """VOID LEADS: local-first, stdlib-only HTTP app for Windows."""
 from __future__ import annotations
 import argparse
+import hmac
+import secrets
 import json
 import os
 import platform
@@ -30,6 +32,7 @@ from freshness import freshness, iso_publication, publication_time, DEFAULT_CHEC
 from source_import import read_source_csv, validate_source, template_csv
 from release_config import APP_VERSION, RELEASE_REPO
 from updates import latest_release
+from update_state import read_status, write_status
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 STATIC = ROOT / "static"
@@ -41,6 +44,9 @@ _session_vk_token = ""  # RAM, or recoverable via Windows DPAPI on opted-in devi
 _tray = None
 _server = None
 _single_mutex = None
+_update_in_progress = False
+_update_key = ''
+_browser_processes = []
 PREFS_DEFAULT = {"notifications": True, "min_notification_score": 60,
                  "target_niches": DEFAULT_TARGET_NICHES.copy()}
 
@@ -651,6 +657,10 @@ class Handler(BaseHTTPRequestHandler):
                                             "tray_available": bool(_tray and _tray.icon)})
             if path == "/api/update/check":
                 return self.send_json(200, latest_release())
+            if path == "/api/update/progress":
+                if not _update_in_progress:
+                    return self.send_json(200, {'state':'idle','message':'Нет активного обновления'})
+                return self.send_json(200, read_status(DATA_DIR))
             with closing(db_connection()) as db:
                 if path == "/api/public/sources/template.csv":
                     payload = template_csv().encode('utf-8')
@@ -716,7 +726,7 @@ class Handler(BaseHTTPRequestHandler):
         self.write_route("DELETE")
 
     def write_route(self, method):
-        global _last_osm_request, _session_vk_token
+        global _last_osm_request, _session_vk_token, _update_in_progress, _update_key
         path = urlparse(self.path).path
         parts = path.strip("/").split("/")
         # Avoid localhost cross-site form/posts and DNS rebinding surprises.
@@ -764,25 +774,46 @@ class Handler(BaseHTTPRequestHandler):
                     set_startup(data['startup'])
                 return self.send_json(200, {'ok':True, 'preferences':save_preferences(**fields),
                                             'startup_enabled':is_startup_enabled()})
+            if path == '/api/update/shutdown' and method == 'POST':
+                if (not _update_in_progress or not _update_key or
+                    not hmac.compare_digest(self.headers.get('X-Update-Key',''),_update_key)):
+                    return self.send_json(403, {'error':'Нет разрешения на завершение'})
+                threading.Timer(1.3, self.server.shutdown).start()
+                return self.send_json(200, {'ok':True,'message':'Старая версия завершается'})
             if path == '/api/update/install' and method == 'POST':
-                if os.name != 'nt' or not getattr(sys, 'frozen', False):
-                    raise ValueError('Установка обновлений доступна только из установленной Windows-версии')
+                if os.name != 'nt' or not getattr(sys,'frozen',False):
+                    raise ValueError('Обновления доступны из установленной Windows-версии')
                 if not RELEASE_REPO:
-                    raise ValueError('Канал обновлений не настроен: сначала опубликуйте выпуск на GitHub')
+                    raise ValueError('Канал обновлений не настроен')
+                if _update_in_progress:
+                    previous = read_status(DATA_DIR)
+                    if previous['state'] not in {'failed','idle','done'}:
+                        raise ValueError('Обновление уже выполняется')
+                    _update_in_progress = False
                 if not latest_release().get('available'):
-                    raise ValueError('Установлена последняя версия')
+                    raise ValueError('Установлена актуальная версия')
                 updater = Path(sys.executable).with_name('VOID-Updater.exe')
                 if not updater.is_file():
-                    raise ValueError('Не найден компонент обновления VOID-Updater.exe. Переустановите приложение.')
+                    raise ValueError('Не найден VOID-Updater.exe. Переустанови программу.')
                 temp_dir = Path(tempfile.mkdtemp(prefix='void-leads-update-'))
                 temp_updater = temp_dir / 'VOID-Updater.exe'
-                shutil.copy2(updater, temp_updater)
-                subprocess.Popen([str(temp_updater), '--pid', str(os.getpid()),
-                                  '--app', str(Path(sys.executable).resolve())],
-                                 cwd=str(temp_dir), close_fds=True,
-                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-                threading.Timer(2.0, self.server.shutdown).start()
-                return self.send_json(200, {'ok': True, 'message': 'Обновлятор запущен. Приложение сейчас закроется.'})
+                shutil.copy2(updater,temp_updater)
+                key=secrets.token_urlsafe(32)
+                _update_key=key
+                write_status(DATA_DIR,'starting','Подготавливаем загрузку обновления')
+                try:
+                    subprocess.Popen([str(temp_updater),'--pid',str(os.getpid()),
+                                      '--app',str(Path(sys.executable).resolve()),
+                                      '--port',str(self.server.server_address[1]),
+                                      '--shutdown-key',key],
+                                     cwd=str(temp_dir),close_fds=True,
+                                     creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                    _update_in_progress=True
+                except OSError as exc:
+                    _update_key=''
+                    write_status(DATA_DIR,'failed',str(exc))
+                    raise
+                return self.send_json(200,{'ok':True,'message':'Скачиваем и проверяем новую версию. Программа останется открытой до начала установки.'})
             with _lock, closing(db_connection()) as db:
                 if path == "/api/public/sources" and method == "POST":
                     sid, fresh = add_public_source(db, data)
@@ -953,24 +984,39 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def launch_ui(url):
-    """On Windows prefer an app-like Edge window; fallback to the default browser."""
+    """Open managed, isolated browser window (does not affect other Edge tabs)."""
     if platform.system() == "Windows":
-        roots = [os.environ.get("PROGRAMFILES(X86)", ""), os.environ.get("PROGRAMFILES", ""),
-                 os.environ.get("LOCALAPPDATA", "")]
+        roots=[os.environ.get('PROGRAMFILES(X86)',''),os.environ.get('PROGRAMFILES',''),
+               os.environ.get('LOCALAPPDATA','')]
         for root in roots:
             if not root:
                 continue
-            paths = [Path(root) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
-                     Path(root) / "Google" / "Chrome" / "Application" / "chrome.exe"]
-            for binary in paths:
+            for binary in [Path(root)/'Microsoft'/'Edge'/'Application'/'msedge.exe',
+                           Path(root)/'Google'/'Chrome'/'Application'/'chrome.exe']:
                 if binary.is_file():
                     try:
-                        subprocess.Popen([str(binary), f"--app={url}", "--window-size=1440,900"],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        profile=DATA_DIR/'desktop-browser'
+                        profile.mkdir(parents=True,exist_ok=True)
+                        proc=subprocess.Popen(
+                            [str(binary),f'--app={url}',f'--user-data-dir={profile}',
+                             '--no-first-run','--window-size=1440,900'],
+                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                        _browser_processes.append(proc)
                         return
                     except OSError:
                         pass
     webbrowser.open(url)
+
+
+def close_managed_browser_windows():
+    """Only stop browser processes started by VOID LEADS with its own profile."""
+    for proc in list(_browser_processes):
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+        except (OSError,PermissionError):
+            pass
+    _browser_processes.clear()
 
 
 def serve(port=8765, open_browser=True):
@@ -1018,6 +1064,7 @@ def serve(port=8765, open_browser=True):
         stop_background.set()
         if _tray:
             _tray.stop()
+        close_managed_browser_windows()
         server.server_close()
 
 
