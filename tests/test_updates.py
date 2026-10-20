@@ -55,7 +55,7 @@ def test_equal_version_stays_put():
 
 def test_refuses_unknown_release_assets():
     with pytest.raises(ValueError):
-        updates.latest_release(repo='example/void-leads', opener=opener(release(setup=False)))
+        updates.latest_release(repo='example/void-leads', current_version='0.4.0', opener=opener(release(setup=False)))
 
 
 def test_no_cross_repo_asset_or_http():
@@ -106,7 +106,7 @@ def test_update_check_endpoint_when_unconfigured(tmp_path, monkeypatch):
         assert data['configured'] is False
         with urlopen(f'http://127.0.0.1:{server.server_port}/api/config',timeout=3) as response:
             data=json.load(response)
-        assert data['version']=='0.4.0'
+        assert data['version']==app.APP_VERSION
     finally:
         server.shutdown()
         server.server_close()
