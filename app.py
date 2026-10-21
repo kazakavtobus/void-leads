@@ -55,7 +55,7 @@ _company_job_lock = threading.Lock()
 _company_job = {'state':'idle','total':0,'done':0,'ok':0,'errors':0,'message':''}
 PREFS_DEFAULT = {"notifications": True, "min_notification_score": 60,
                  "target_niches": DEFAULT_TARGET_NICHES.copy(),
-                 "company_auto_discovery": True, "company_auto_audit": True}
+                 "company_auto_discovery": False, "company_auto_audit": False}
 
 def preferences():
     p = DATA_DIR / "settings.json"
