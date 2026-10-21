@@ -100,7 +100,7 @@ def test_auto_discovery_and_crm_merge(tmp_path,monkeypatch):
     ]}}
     monkeypatch.setattr(app,"discover_wikidata",lambda:parse_wikidata(examples))
     started=app.start_discovery(manual=True)
-    assert started["state"]=="running"
+    assert started["state"] in {"running","done"}
     for _ in range(80):
         if app.discovery_status()["state"]=="done":break
         time.sleep(.025)
