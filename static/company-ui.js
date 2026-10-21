@@ -1,11 +1,12 @@
 'use strict';
 /* Company Hunter — self-contained view integrated with the existing CRM globals. */
 async function refreshCompany(){
- const responses=await Promise.all([api('/api/company/queue'),api('/api/company/discovery')]);
+ const responses=await Promise.all([api('/api/company/queue'),api('/api/company/discovery'),api('/api/company/vk')]);
  const response=responses[0];
  state.companyEntries=response.companies||[];
  state.companyJob=response.job||{state:'idle'};
  state.discovery=responses[1];
+ state.vkDiscovery=responses[2];
  if(state.view==='company')render();
 }
 function companyHunter(){
@@ -16,7 +17,8 @@ function companyHunter(){
  const selected=companies.find(function(c){return c.id===state.companySelected;})||companies[0];
  const job=state.companyJob||{state:'idle'};
  const running=job.state==='running';
- const discovery=state.discovery||{state:'idle',last_added:0,enabled:true};
+ const discovery=state.discovery||{state:'idle',last_added:0,enabled:false};
+ const vk=state.vkDiscovery||{state:'idle',total:0,done:0,added:0,enabled:false,token_available:false};
  const niches={all:'Все направления',furniture:'Мебель и кухни',construction:'Строительство',
                industrial:'Производство',equipment:'Спецтехника'};
  function card(c){
@@ -77,6 +79,23 @@ function companyHunter(){
     '. За прошлую проверку добавлено: '+Number(discovery.last_added||0)+
     '. Для OSM загрузи локальный GeoJSON с проверяемыми OSM ID. Карты © OpenStreetMap contributors (ODbL). '+
     '<a href="https://extract.bbbike.org/" target="_blank" rel="noopener noreferrer">Получить выгрузку ↗</a></p></section>'+
+    '<section class="company-discovery company-vk glass"><div class="company-discovery-heading">'+
+    '<div><span class="eyebrow">НОВЫЙ КАНАЛ · VK API</span><h2>Поиск бизнес-сообществ</h2>'+
+    '<p>Ищем мебельные фабрики, строителей и производства в VK через официальный API. Проверяем город и направление по данным сообщества, а не только по поисковому запросу. Не рассылаем сообщения.</p></div></div>'+
+    '<div class="company-discovery-controls">'+
+    '<label class="company-city-label">Город<select id="companyVkCity" class="control">'+
+    ['Рязань','Тула','Калуга'].map(c=>'<option value="'+esc(c)+'" '+(state.companyVkCity===c?'selected':'')+'>'+esc(c)+'</option>').join('')+'</select></label>'+
+    '<label class="company-city-label">Ниша<select id="companyVkNiche" class="control">'+
+    options({furniture:'Мебель и кухни',construction:'Строительство',industrial:'Производство'},state.companyVkNiche)+'</select></label>'+
+    '<button class="btn primary" data-action="company-vk-search" '+(vk.state==='running'?'disabled':'')+'>'+ico('search')+
+    (vk.state==='running'?' VK: проверяем…':' Найти бизнесы в VK')+'</button>'+
+    '<label class="company-auto-label"><input type="checkbox" id="companyAutoVK" '+(vk.enabled?'checked':'')+
+    '/> Автопоиск VK (9 комбинаций в сутки)</label>'+
+    (!vk.token_available?'<button class="btn soft" data-view="public">Подключить ключ VK →</button>':'')+'</div>'+
+    '<p class="company-discovery-foot">'+esc(vk.message||'Сервис не запускался')+
+    (vk.state==='running'?' · '+vk.done+'/'+vk.total:'')+
+    '. '+(vk.state==='done'?'Новых компаний: '+Number(vk.added||0)+'. ':'')+
+    'Нужен ключ VK API с правами на поиск сообществ. Некорректные или неподходящие страницы не считаем клиентами.</p></section>'+
     '<div class="notes-grid">'+
       '<div class="note-kpi glass"><strong>'+companies.length+'</strong><span>Компаний в выборке</span></div>'+
       '<div class="note-kpi glass"><strong>'+inspected+'</strong><span>HTML проверен</span></div>'+
