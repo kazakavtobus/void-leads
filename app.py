@@ -335,9 +335,25 @@ def find_existing(db, data):
     city = norm(data.get("city", ""))
     if not name or not city:
         return None
-    rows = db.execute("SELECT id,name,city,phone FROM leads WHERE demo=0").fetchall()
+    rows = db.execute("SELECT id,name,city,phone,website FROM leads WHERE demo=0").fetchall()
+    # Same verified business domain in the same city is a useful secondary key
+    # for legal-name vs trading-name differences. Never merge different cities.
+    from urllib.parse import urlsplit
+    def website_key(value):
+        if not value:
+            return ""
+        parsed=urlsplit(safe_url(value))
+        domain=(parsed.hostname or "").lower().removeprefix("www.")
+        if not domain or domain in {"vk.com","vk.ru","t.me","telegram.me","instagram.com","wa.me"}:
+            return ""
+        return domain+(parsed.path.rstrip("/") or "/")
+    incoming_site=website_key(data.get("website",""))
     for row in rows:
-        if name == norm(row["name"]) and city == norm(row["city"]):
+        if city != norm(row["city"]):
+            continue
+        if name == norm(row["name"]):
+            return row["id"]
+        if incoming_site and incoming_site == website_key(row["website"]):
             return row["id"]
     return None
 
