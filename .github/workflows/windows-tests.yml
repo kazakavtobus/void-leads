@@ -17,6 +17,7 @@ jobs:
       - run: python -m pip install --upgrade pytest pillow
       - run: python -m pytest -q
       - run: node --check static/app.js
+      - run: node --check static/company-ui.js
       - run: python packaging/make_icon.py
       - name: Check icon exists
         shell: pwsh
