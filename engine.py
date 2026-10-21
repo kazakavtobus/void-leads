@@ -7,7 +7,7 @@ import unicodedata
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-SOURCES = {"ad", "map", "partner", "request", "manual"}
+SOURCES = {"ad", "map", "directory", "partner", "request", "manual"}
 STATUSES = {"new", "research", "ready", "contacted", "replied", "won", "lost", "skip"}
 WEB_STATUSES = {"unknown", "not_found", "found"}
 NICHES = {

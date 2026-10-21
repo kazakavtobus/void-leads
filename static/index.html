@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light"><meta name="theme-color" content="#f6f8fc">
-<title>VOID LEADS — Business Hunter</title><link rel="stylesheet" href="/style.css"><link rel="icon" href="/favicon.ico" type="image/x-icon"></head><body>
+<title>VOID LEADS — Business Hunter</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/company-ui.css"><link rel="icon" href="/favicon.ico" type="image/x-icon"></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
  <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.6"/><rect x="14" y="3" width="7" height="5" rx="1.6"/><rect x="14" y="12" width="7" height="9" rx="1.6"/><rect x="3" y="16" width="7" height="5" rx="1.6"/></symbol>
  <symbol id="i-leads" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
@@ -45,6 +45,7 @@
   <nav class="nav" id="nav">
     <button class="nav-link active" data-view="dashboard"> <svg class="ic"><use href="#i-dashboard"/></svg> Обзор </button>
     <button class="nav-link" data-view="public"><svg class="ic"><use href="#i-megaphone"/></svg> Public Hunter <span class="nav-badge" id="publicCount">0</span></button>
+    <button class="nav-link" data-view="company"><svg class="ic"><use href="#i-globe"/></svg> Company Hunter <span class="nav-badge">NEW</span></button>
     <button class="nav-link" data-view="leads"><svg class="ic"><use href="#i-leads"/></svg> База лидов <span class="nav-badge" id="navCount">0</span></button>
     <div class="nav-title">НАПРАВЛЕНИЯ</div>
     <button class="nav-link" data-view="ad"><svg class="ic"><use href="#i-plus"/></svg> Добавить рекламу</button>
@@ -80,4 +81,4 @@
 </div><p class="hint">VK требует ваш собственный токен API при проверке. Для RSS указывай разрешённый HTTPS-фид. Telegram-посты добавляются вручную.</p><div class="dialog-actions"><button type="button" class="btn quiet" data-close="sourceDialog">Отмена</button><button type="submit" class="btn primary">Добавить</button></div></form></dialog>
 <dialog class="dialog small-dialog" id="postDialog"><form id="postForm"><div class="dialog-head"><div><div class="eyebrow">PUBLIC HUNTER</div><h2>Добавить публикацию</h2></div><button class="icon-button" type="button" data-close="postDialog" aria-label="Закрыть"><svg class="ic"><use href="#i-close"/></svg></button></div><div class="form-grid single"><label>Источник <select name="source_id" id="manualPostSource" required></select></label><label>Ссылка на пост (необязательно) <input name="url" placeholder="https://..."></label><label>Когда опубликовано <input name="published_at" id="postPublished" type="datetime-local"><small>Если время неизвестно — очисти поле: пост не считается свежим.</small></label><label>Текст публикации <textarea name="text" rows="7" required placeholder="Вставь опубликованное объявление..." ></textarea></label></div><div class="dialog-actions"><button type="button" class="btn quiet" data-close="postDialog">Отмена</button><button class="btn primary" type="submit">Проверить и добавить</button></div></form></dialog>
 <dialog class="dialog small-dialog" id="reviewDialog"><form id="reviewForm"><div class="dialog-head"><div><div class="eyebrow">ПРОВЕРКА БИЗНЕСА</div><h2>Сохранить как лид</h2></div><button class="icon-button" type="button" data-close="reviewDialog" aria-label="Закрыть"><svg class="ic"><use href="#i-close"/></svg></button></div><p class="hint">Проверь название компании по первоисточнику. Автоматическая подсказка может ошибаться.</p><label class="field">Название бизнеса <input name="name" id="reviewName" required minlength="2"></label><div class="dialog-actions"><button type="button" class="btn quiet" data-close="reviewDialog">Отмена</button><button class="btn primary" type="submit">Добавить в CRM</button></div></form></dialog>
-<div id="toasts" role="status" aria-live="polite"></div><script src="/app.js" defer></script></body></html>
+<div id="toasts" role="status" aria-live="polite"></div><script src="/app.js" defer></script><script src="/company-ui.js" defer></script></body></html>

@@ -5,13 +5,13 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const fmt=n=>new Intl.NumberFormat('ru-RU').format(Number(n)||0);
 const safeLink=u=>{try{const url=new URL(u);return ['https:','http:'].includes(url.protocol)?url.href:'';}catch{return '';}};
 const date=s=>{try{return s?new Date(s).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Дата неизвестна';}catch{return 'Дата неизвестна';}};
-const viewNames={dashboard:'Обзор',public:'Public Hunter',leads:'База лидов',ad:'Добавить рекламу',map:'Map Hunter',partner:'Партнёры',request:'Прямые запросы',pipeline:'Воронка',settings:'Настройки'};
-const types={ad:'Местная реклама',map:'Карты / OSM',partner:'Партнёр',request:'Прямой запрос',manual:'Вручную'};
+const viewNames={dashboard:'Обзор',public:'Public Hunter',company:'Company Hunter',leads:'База лидов',ad:'Добавить рекламу',map:'Map Hunter',partner:'Партнёры',request:'Прямые запросы',pipeline:'Воронка',settings:'Настройки'};
+const types={directory:'Бизнес-каталоги / VK',ad:'Местная реклама',map:'Карты / OSM',partner:'Партнёр',request:'Прямой запрос',manual:'Вручную'};
 const statuses={new:'Новый',research:'Проверка',ready:'Готов к контакту',contacted:'Связался',replied:'Ответили',won:'Оплачен',lost:'Отказ',skip:'Не подходит'};
 const webStatuses={unknown:'Не проверен',not_found:'Не обнаружен',found:'Есть сайт'};
 const kinds={vk:'VK API',rss:'RSS',manual:'Telegram / вручную'};
 const freshLabels={hot:'Горячее · 0–2 ч',fresh:'Свежая · до 24 ч',archive:'Архив · старше суток',undated:'Дата не указана'};
-let state={view:'dashboard',leads:[],sources:[],posts:[],freshPosts:[],stats:{},publicStats:{},config:{},selectedId:null,detail:null,filter:'all',sort:'score',search:'',postStatus:'fresh',postSource:'all',targetOnly:true,targetNiche:'all',targetSettingsOpen:false,sourceSearch:'',reviewId:null};
+let state={view:'dashboard',leads:[],sources:[],posts:[],freshPosts:[],stats:{},publicStats:{},config:{},selectedId:null,detail:null,filter:'all',sort:'score',search:'',postStatus:'fresh',postSource:'all',targetOnly:true,targetNiche:'all',targetSettingsOpen:false,sourceSearch:'',reviewId:null,companyEntries:[],companyJob:{state:'idle'},companyNiche:'all',companySelected:null,companyGeoCity:'Рязань',discovery:{state:'idle'},vkDiscovery:{state:'idle'},companyVkCity:'Рязань',companyVkNiche:'furniture' };
 async function api(url,method='GET',data){const options={method,headers:{'Content-Type':'application/json'}};if(data!==undefined)options.body=JSON.stringify(data);const r=await fetch(url,options);let body;try{body=await r.json();}catch{throw Error('Сервер вернул неверный ответ');}if(!r.ok)throw Error(body.error||`Ошибка ${r.status}`);return body;}
 function toast(msg,bad=false){const n=document.createElement('div');n.className='toast'+(bad?' error':'');n.textContent=msg;$('#toasts').append(n);setTimeout(()=>n.remove(),5500);}
 function elink(url,label){const safe=safeLink(url);return safe?`<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(label||safe)} ↗</a>`:'<span class="muted">Нет</span>';}
@@ -26,12 +26,12 @@ function getFiltered(){const f=state.search.toLowerCase().trim();return state.le
  return true;
  }).sort((a,b)=>a.demo!==b.demo?(a.demo?1:-1):state.sort==='recent'?b.id-a.id:state.sort==='value'?b.potential_value-a.potential_value:b.score-a.score);}
 async function load(){const [leads,stats,sources,posts,freshPosts,publicStats]=await Promise.all([api('/api/leads'),api('/api/stats'),api('/api/public/sources'),api('/api/public/posts?status='+state.postStatus),api('/api/public/posts?status=fresh'),api('/api/public/stats')]);Object.assign(state,{leads,stats,sources,posts,freshPosts,publicStats});if(state.selectedId&&leads.some(l=>l.id===state.selectedId)){state.detail=await api('/api/leads/'+state.selectedId);}else{state.detail=null;}$('#navCount').textContent=stats.total;$('#publicCount').textContent=publicStats.review;render();}
-function route(page){state.view=page;state.selectedId=null;state.detail=null;state.filter='all';state.search='';$('#search').value='';$('#sidebar').classList.remove('open');render();}
-function render(){document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));$('#currentPage').textContent=viewNames[state.view]||'VOID LEADS';let html='';if(state.view==='dashboard')html=dashboard();else if(state.view==='public')html=publicHunter();else if(['leads','ad','map','partner','request'].includes(state.view))html=workspace();else if(state.view==='pipeline')html=pipeline();else html=settings();$('#content').innerHTML=html;}
+function route(page){state.view=page;if(page==='company')refreshCompany().catch(e=>toast(e.message,true));state.selectedId=null;state.detail=null;state.filter='all';state.search='';$('#search').value='';$('#sidebar').classList.remove('open');render();}
+function render(){document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));$('#currentPage').textContent=viewNames[state.view]||'VOID LEADS';let html='';if(state.view==='dashboard')html=dashboard();else if(state.view==='public')html=publicHunter();else if(state.view==='company')html=companyHunter();else if(['leads','ad','map','partner','request'].includes(state.view))html=workspace();else if(state.view==='pipeline')html=pipeline();else html=settings();$('#content').innerHTML=html;}
 function metric(label,value,iconName,foot,accent=false){return `<div class="metric glass"><div class="metric-top"><span>${esc(label)}</span>${ico(iconName)}</div><div class="metric-number ${accent?'accent-number':''}">${esc(value)}</div><div class="metric-foot">${esc(foot)}</div></div>`;}
-function dashboard(){const s=state.stats,p=state.publicStats;const newest=state.freshPosts.slice(0,5);return pageTitle('РАБОЧЕЕ ПРОСТРАНСТВО','Данил, свежие возможности — сегодня.','В основной ленте только реклама последних 24 часов. Остальные публикации уходят в архив, а подтверждённые компании остаются в CRM.',`<button class="btn soft" data-action="import-sources">${ico('upload')} Импорт пабликов CSV</button><button class="btn primary" data-view="public">${ico('megaphone')} Public Hunter</button>`)
+function dashboard(){const s=state.stats,p=state.publicStats;const newest=state.freshPosts.slice(0,5);return pageTitle('РАБОЧЕЕ ПРОСТРАНСТВО','Данил, свежие возможности — сегодня.','Ищем компании в городах и нишах, проверяем сайты и выводим кандидатов для личного обращения. Реклама и прямые запросы остаются отдельным источником.',`<button class="btn soft" data-view="public">${ico('megaphone')} Public Hunter</button><button class="btn primary" data-view="company">${ico('search')} Company Hunter</button>`)
  +`<div class="metric-grid">${metric('Моих пабликов',p.sources||0,'megaphone','Разные города и источники')}${metric('Перспективных за 24 ч',p.target_fresh||0,'bolt','Свежие компании в целевых нишах',true)}${metric('За последние 2 ч',p.hot||0,'activity','Самые горячие находки')}${metric('Оплачено',fmt(s.revenue||0)+' ₽','leads','По реальным закрытым сделкам')}</div>`
- +`<div class="content-grid"><section class="panel glass"><div class="panel-header"><h2>Самые свежие рекламодатели</h2><button class="btn quiet small" data-view="public">Открыть ленту ${ico('arrow')}</button></div>${newest.length?newest.map(p=>`<div class="tile"><div class="tile-header"><div><h3>${esc(p.suggested_name)}</h3><div class="tile-meta">${esc(p.city)} · ${date(p.published_at)} · ${esc(p.source_name)}</div></div><span class="chip ${p.freshness==='hot'?'blue':''}">${esc(freshLabels[p.freshness])}</span></div><p>${esc(p.text.slice(0,200))}</p><div class="tile-bottom">${p.source_url?elink(p.source_url,'Первоначальный пост'):'<span class="chip">Без ссылки</span>'}<button class="btn soft small" data-view="public">В Public Hunter ${ico('arrow')}</button></div></div>`).join(''):noData('За 24 часа подходящей рекламы нет','Подключи паблики через CSV и проверь источники. Старые посты не считаются новыми.')}</section><section class="panel glass blue-glow"><div class="eyebrow">ПЛАН НА СЕГОДНЯ</div><h2 style="margin:10px 0 0;font-size:24px;letter-spacing:-.8px">Ищем не объявления, а реальных рекламодателей</h2><p class="pitch-text">Добавь проверенные паблики, подключи VK API или импортируй текст из Telegram. Программа разнесёт публикации по возрасту, а ты выберешь клиентов для CRM.</p><div class="tip-list"><div class="tip-item">${ico('check')} Свежие публикации за 24 часа</div><div class="tip-item">${ico('check')} CSV с пабликами всей России</div><div class="tip-item">${ico('check')} Повторы рекламы без дублей</div><div class="tip-item">${ico('check')} Никаких автоматических рассылок</div></div><div class="actions" style="margin-top:25px"><button class="btn primary" data-view="public">Перейти к поиску ${ico('arrow')}</button></div></section></div>`;}
+ +`<div class="content-grid"><section class="panel glass"><div class="panel-header"><h2>Самые свежие рекламодатели</h2><button class="btn quiet small" data-view="public">Открыть ленту ${ico('arrow')}</button></div>${newest.length?newest.map(p=>`<div class="tile"><div class="tile-header"><div><h3>${esc(p.suggested_name)}</h3><div class="tile-meta">${esc(p.city)} · ${date(p.published_at)} · ${esc(p.source_name)}</div></div><span class="chip ${p.freshness==='hot'?'blue':''}">${esc(freshLabels[p.freshness])}</span></div><p>${esc(p.text.slice(0,200))}</p><div class="tile-bottom">${p.source_url?elink(p.source_url,'Первоначальный пост'):'<span class="chip">Без ссылки</span>'}<button class="btn soft small" data-view="public">В Public Hunter ${ico('arrow')}</button></div></div>`).join(''):noData('За 24 часа подходящей рекламы нет','Подключи паблики через CSV и проверь источники. Старые посты не считаются новыми.')}</section><section class="panel glass blue-glow"><div class="eyebrow">ПЛАН НА СЕГОДНЯ</div><h2 style="margin:10px 0 0;font-size:24px;letter-spacing:-.8px">Ищем компании, которым можем предложить результат</h2><p class="pitch-text">Начни с Company Hunter: поиск бизнес-сообществ VK, Wikidata, OpenStreetMap и последующая проверка сайтов. Каждое предложение подтверждаем реальными наблюдениями.</p><div class="tip-list"><div class="tip-item">${ico('check')} Поиск компаний по нишам и городам</div><div class="tip-item">${ico('check')} Аудит сайтов с объяснением признаков</div><div class="tip-item">${ico('check')} Сохранение переписок и статусов сделок</div><div class="tip-item">${ico('check')} Никаких автоматических рассылок</div></div><div class="actions" style="margin-top:25px"><button class="btn primary" data-view="company">Перейти к поиску ${ico('arrow')}</button></div></section></div>`;}
 
 function leadTile(l){return `<div class="tile"><div class="tile-header"><div><h3>${esc(l.name)}${l.demo?' <span class="chip demo">ДЕМО</span>':''}</h3><div class="tile-meta">${esc(l.city||'Город не указан')} · ${esc(types[l.source_type]||'Вручную')}</div></div><span class="score">${l.score}/100</span></div><p>${esc((l.description||'Описание пока не добавлено').slice(0,170))}</p><div class="tile-bottom"><span class="chip ${l.ad_count>1?'blue':''}">${l.ad_count>1?`Реклама × ${l.ad_count}`:webStatuses[l.website_status]}</span><button class="btn soft small" data-view="leads" data-select="${l.id}">Открыть ${ico('arrow')}</button></div></div>`;}
 function sourceTile(s){return `<article class="source-card" ${!s.enabled?'style="opacity:.62"':''}><div class="source-card-top"><div><h3>${esc(s.name)}</h3><p>${esc(s.city)} · ${esc(kinds[s.kind])}</p></div><span class="chip ${s.new_posts?'blue':''}">${s.new_posts||0} новых</span></div><p>${s.kind==='manual'&&s.locator?elink(s.locator,'Открыть паблик'):s.locator?esc(s.locator):'Публикации добавляются вручную'} · ${s.last_checked?'Проверен '+date(s.last_checked):'Ещё не проверялся'} · ${s.interval_minutes||20} мин</p>${s.last_checked?`<div class="source-diagnostics"><span>Прочитано <b>${s.last_count||0}</b></span><span>Реклама <b>${s.last_matched||0}</b></span><span>Отсеяно <b>${s.last_filtered||0}</b></span><span>В очереди <b>${s.last_reviewable||0}</b></span><span>В архиве <b>${s.last_archive||0}</b></span><span>Новых <b>${s.last_added||0}</b></span></div>`:''}<p class="source-yield"><b>${s.targets_7d||0} перспективных</b> из ${s.ads_7d||0} рекламных публикаций за 7 дней</p>${s.last_checked&&s.last_count>=20&&s.last_matched===0?'<p class="hint source-warning">За последнюю проверку подходящей рекламы нет. Возможно, этот источник стоит заменить.</p>':''}${s.last_error?`<p class="hint error-hint">Ошибка: ${esc(s.last_error)}</p>`:''}<div class="actions"><button class="btn quiet small" data-action="toggle-source" data-id="${s.id}">${s.enabled?'Пауза':'Включить'}</button>${s.kind==='manual'?`<button class="btn soft small" data-action="open-post" data-source="${s.id}">Добавить пост</button>`:`<button class="btn soft small" data-action="check-source" data-id="${s.id}">${ico('refresh')} Проверить</button>`}${s.last_reviewable?`<button class="btn soft small" data-action="review-source" data-id="${s.id}">Разобрать ${s.last_reviewable}</button>`:''}<button class="btn quiet small" data-action="remove-source" data-id="${s.id}">${ico('trash')}</button></div></article>`;}
@@ -151,6 +151,72 @@ async function addNote(){const note=$('#noteInput').value.trim();if(!note)return
 async function doImportSources(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/public/sources/import','POST',{csv});await load();toast(`Паблики: ${r.added} новых, ${r.duplicates} дублей, ${r.invalid} ошибочных строк`);if(r.errors.length)toast(r.errors.slice(0,3).join(' | '),true);}catch(e){toast(e.message,true);}};input.click();}
 async function doImportCsv(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/import/csv','POST',{csv});await load();toast(`Импорт: ${r.created} новых, ${r.updated} повторов`);}catch(err){toast(err.message,true);}};input.click();}
 async function handleAction(element){const a=element.dataset.action;const id=element.dataset.id;
+ if(a==='company-vk-token-save'){
+  const token=$('#companyVkUserToken')?.value.trim()||'';
+  if(token.length<12){toast('Введи VK user token, а не логин или пароль',true);return;}
+  element.disabled=true;
+  try{await api('/api/vk/user-token','POST',{token});await refreshCompany();toast('VK user token сохранён защищённо');}
+  catch(err){toast(err.message,true);element.disabled=false;}
+  return;
+ }
+ if(a==='company-vk-token-delete'){
+  if(!confirm('Отключить пользовательский ключ VK? Автопоиск VK будет выключен.'))return;
+  try{
+    await api('/api/vk/user-token','DELETE');
+    const r=await api('/api/preferences','POST',{company_auto_vk:false});
+    state.config.preferences=r.preferences;await refreshCompany();
+    toast('Пользовательский VK-токен отключён');
+  }catch(err){toast(err.message,true);}
+  return;
+ }
+ if(a==='company-vk-sweep'){
+  element.disabled=true;
+  try{
+    const result=await api('/api/company/vk/sweep','POST',{});
+    state.vkDiscovery=result;toast(result.message);await refreshCompany();
+  }catch(err){toast(err.message,true);element.disabled=false;}return;
+ }
+ if(a==='company-vk-search'){
+  element.disabled=true;
+  try{
+    const result=await api('/api/company/vk/search','POST',
+       {city:state.companyVkCity,niche:state.companyVkNiche});
+    state.vkDiscovery=result;toast(result.message);await refreshCompany();
+  }catch(err){toast(err.message,true);element.disabled=false;}return;
+ }
+ if(a==='company-discover'){
+  element.disabled=true;
+  try{const r=await api('/api/company/discover','POST',{});toast(r.message);await refreshCompany();}
+  catch(err){toast(err.message,true);element.disabled=false;}return;
+ }
+ if(a==='company-import-osm'){
+  const file=document.createElement('input');file.type='file';file.accept='.geojson,.json,application/geo+json,application/json';
+  file.onchange=async function(){
+    if(!file.files?.[0])return;
+    if(file.files[0].size>12_000_000){toast('GeoJSON больше 12 МБ — создай выгрузку поменьше',true);return;}
+    const city=state.companyGeoCity||'Рязань';
+    try{
+      toast('Обрабатываю выгрузку OSM…');
+      const raw=await file.files[0].text();
+      const result=await api('/api/company/import-geojson','POST',{city,geojson:raw});
+      toast('OSM: найдено '+result.total+', добавлено '+result.added+', повторных '+result.updated);
+      await load();await refreshCompany();
+    }catch(err){toast(err.message,true);}
+  };
+  file.click();return;
+ }
+ if(a==='company-batch'){
+  element.disabled=true;
+  try{const result=await api('/api/company/audit-batch','POST',{limit:8,niche:state.companyNiche});
+      state.companyJob=result;toast(result.message);await refreshCompany();}
+  catch(err){toast(err.message,true);element.disabled=false;}return;
+ }
+ if(a==='company-copy-draft'){
+  const company=state.companyEntries.find(x=>x.id===Number(id));
+  if(!company?.audit?.draft)return toast('Черновик пока не подготовлен',true);
+  try{await navigator.clipboard.writeText(company.audit.draft);toast('Черновик скопирован');}
+  catch{toast('Не удалось скопировать. Выдели текст вручную.',true);}return;
+ }
  if(a==='check-update'){
   element.disabled=true;const status=$('#updateState');status.textContent='Проверяем официальный выпуск...';
   try{const res=await api('/api/update/check');status.textContent=res.message+(res.available?` · ${res.latest}`:'');
@@ -216,13 +282,39 @@ window.addEventListener('DOMContentLoaded',async()=>{try{state.config=await api(
  document.addEventListener('click',async e=>{
   const close=e.target.closest('[data-close]');if(close){$('#'+close.dataset.close).close();return;}
   const nav=e.target.closest('[data-view]');if(nav){route(nav.dataset.view);if(nav.dataset.select){state.selectedId=Number(nav.dataset.select);await selectLead(state.selectedId);}return;}
+  const company=e.target.closest('[data-company]');if(company){state.companySelected=Number(company.dataset.company);render();return;}
   const sel=e.target.closest('[data-select]');if(sel){await selectLead(sel.dataset.select);return;}
   const act=e.target.closest('[data-action]');if(act){try{await handleAction(act);}catch(err){toast(err.message,true);}}
  });
  document.addEventListener('submit',async e=>{const id=e.target.id;if(!['leadForm','sourceForm','postForm','reviewForm','adForm','osmForm'].includes(id))return;e.preventDefault();if(id==='leadForm')return submitLead(e);if(id==='sourceForm')return submitSource(e);if(id==='postForm')return submitPost(e);if(id==='reviewForm')return submitReview(e);if(id==='adForm')return submitAd(e);if(id==='osmForm')return submitOsm(e);});
  document.addEventListener('toggle',e=>{if(e.target.id==='targetSettings')state.targetSettingsOpen=e.target.open;},true);
  document.addEventListener('input',e=>{if(e.target.matches('[data-target-niche]')){const label=$('#targetSelectionStatus');if(label)label.textContent='Выбрано направлений: '+document.querySelectorAll('[data-target-niche]:checked').length;}if(e.target.id==='sourceSearch'){state.sourceSearch=e.target.value;const el=$('#sourceCards');if(el)el.innerHTML=sourceCards();}});
- document.addEventListener('change',async e=>{if(e.target.id==='statusFilter'){state.filter=e.target.value;state.selectedId=null;state.detail=null;render();}if(e.target.id==='sortFilter'){state.sort=e.target.value;render();}if(e.target.id==='postStatus'){state.postStatus=e.target.value;await load();}if(e.target.id==='postSource'){state.postSource=e.target.value;render();}if(e.target.id==='targetNiche'){state.targetNiche=e.target.value;render();}if(e.target.id==='targetOnly'){state.targetOnly=e.target.checked;render();}
+ document.addEventListener('change',async e=>{if(e.target.id==='companyGeoCity'){state.companyGeoCity=e.target.value;}
+ if(e.target.id==='companyVkCity'){state.companyVkCity=e.target.value;}
+ if(e.target.id==='companyVkNiche'){state.companyVkNiche=e.target.value;}
+ if(e.target.id==='companyAutoVK'){
+   try{
+     const r=await api('/api/preferences','POST',{company_auto_vk:e.target.checked});
+     state.config.preferences=r.preferences;state.vkDiscovery.enabled=e.target.checked;
+     toast(e.target.checked?'Автоматический поиск компаний VK включён':'Автопоиск VK выключен');
+   }catch(err){e.target.checked=!e.target.checked;toast(err.message,true);}
+ }
+ if(e.target.id==='companyAutoAudit'){
+   try{
+     const r=await api('/api/preferences','POST',{company_auto_audit:e.target.checked});
+     state.config.preferences=r.preferences;state.discovery.auto_audit=e.target.checked;
+     toast(e.target.checked?'Ежедневный автоаудит включён':'Ежедневный автоаудит отключён');
+   }catch(err){e.target.checked=!e.target.checked;toast(err.message,true);}
+ }
+ if(e.target.id==='companyAutoDiscovery'){
+   try{
+     const r=await api('/api/preferences','POST',{company_auto_discovery:e.target.checked});
+     state.config.preferences=r.preferences;state.discovery.enabled=e.target.checked;
+     toast(e.target.checked?'Еженедельный автопоиск включён':'Еженедельный автопоиск отключён');
+   }catch(err){e.target.checked=!e.target.checked;toast(err.message,true);}
+ }
+ if(e.target.id==='companyNiche'){state.companyNiche=e.target.value;state.companySelected=null;render();}
+ if(e.target.id==='statusFilter'){state.filter=e.target.value;state.selectedId=null;state.detail=null;render();}if(e.target.id==='sortFilter'){state.sort=e.target.value;render();}if(e.target.id==='postStatus'){state.postStatus=e.target.value;await load();}if(e.target.id==='postSource'){state.postSource=e.target.value;render();}if(e.target.id==='targetNiche'){state.targetNiche=e.target.value;render();}if(e.target.id==='targetOnly'){state.targetOnly=e.target.checked;render();}
  if(e.target.id==='enableNotifications'||e.target.id==='enableStartup'){
   const key=e.target.id==='enableNotifications'?'notifications':'startup';
   try{
@@ -232,6 +324,7 @@ window.addEventListener('DOMContentLoaded',async()=>{try{state.config=await api(
    toast('Настройка сохранена');
   }catch(err){e.target.checked=!e.target.checked;toast(err.message,true);}
  }if(e.target.id==='sourceKind'){const i=$('#sourceLocatorRow input');if(i)i.placeholder=e.target.value==='manual'?'https://t.me/channel':e.target.value==='rss'?'https://example.org/rss.xml':'https://vk.com/overhear.tula';}});
+ setInterval(()=>{if(state.view==='company'&&(state.companyJob.state==='running'||state.discovery.state==='running'||state.vkDiscovery.state==='running'))refreshCompany().catch(()=>{});},2500);
  setInterval(()=>{if(document.visibilityState==='visible'&&!document.querySelector('dialog[open]')&&!document.querySelector('#targetSettings[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))load().catch(()=>{});},60000);
  $('#createLead').addEventListener('click',()=>editModal());$('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
  $('#search').addEventListener('input',e=>{state.search=e.target.value;state.selectedId=null;state.detail=null;if(!['leads','ad','map','partner','request'].includes(state.view))state.view='leads';render();});
