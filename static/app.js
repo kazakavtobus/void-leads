@@ -5,13 +5,13 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const fmt=n=>new Intl.NumberFormat('ru-RU').format(Number(n)||0);
 const safeLink=u=>{try{const url=new URL(u);return ['https:','http:'].includes(url.protocol)?url.href:'';}catch{return '';}};
 const date=s=>{try{return s?new Date(s).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Дата неизвестна';}catch{return 'Дата неизвестна';}};
-const viewNames={dashboard:'Обзор',public:'Public Hunter',leads:'База лидов',ad:'Добавить рекламу',map:'Map Hunter',partner:'Партнёры',request:'Прямые запросы',pipeline:'Воронка',settings:'Настройки'};
+const viewNames={dashboard:'Обзор',public:'Public Hunter',company:'Company Hunter',leads:'База лидов',ad:'Добавить рекламу',map:'Map Hunter',partner:'Партнёры',request:'Прямые запросы',pipeline:'Воронка',settings:'Настройки'};
 const types={ad:'Местная реклама',map:'Карты / OSM',partner:'Партнёр',request:'Прямой запрос',manual:'Вручную'};
 const statuses={new:'Новый',research:'Проверка',ready:'Готов к контакту',contacted:'Связался',replied:'Ответили',won:'Оплачен',lost:'Отказ',skip:'Не подходит'};
 const webStatuses={unknown:'Не проверен',not_found:'Не обнаружен',found:'Есть сайт'};
 const kinds={vk:'VK API',rss:'RSS',manual:'Telegram / вручную'};
 const freshLabels={hot:'Горячее · 0–2 ч',fresh:'Свежая · до 24 ч',archive:'Архив · старше суток',undated:'Дата не указана'};
-let state={view:'dashboard',leads:[],sources:[],posts:[],freshPosts:[],stats:{},publicStats:{},config:{},selectedId:null,detail:null,filter:'all',sort:'score',search:'',postStatus:'fresh',postSource:'all',targetOnly:true,targetNiche:'all',targetSettingsOpen:false,sourceSearch:'',reviewId:null};
+let state={view:'dashboard',leads:[],sources:[],posts:[],freshPosts:[],stats:{},publicStats:{},config:{},selectedId:null,detail:null,filter:'all',sort:'score',search:'',postStatus:'fresh',postSource:'all',targetOnly:true,targetNiche:'all',targetSettingsOpen:false,sourceSearch:'',reviewId:null,companyEntries:[],companyJob:{state:'idle'},companyNiche:'all',companySelected:null};
 async function api(url,method='GET',data){const options={method,headers:{'Content-Type':'application/json'}};if(data!==undefined)options.body=JSON.stringify(data);const r=await fetch(url,options);let body;try{body=await r.json();}catch{throw Error('Сервер вернул неверный ответ');}if(!r.ok)throw Error(body.error||`Ошибка ${r.status}`);return body;}
 function toast(msg,bad=false){const n=document.createElement('div');n.className='toast'+(bad?' error':'');n.textContent=msg;$('#toasts').append(n);setTimeout(()=>n.remove(),5500);}
 function elink(url,label){const safe=safeLink(url);return safe?`<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(label||safe)} ↗</a>`:'<span class="muted">Нет</span>';}
@@ -26,8 +26,8 @@ function getFiltered(){const f=state.search.toLowerCase().trim();return state.le
  return true;
  }).sort((a,b)=>a.demo!==b.demo?(a.demo?1:-1):state.sort==='recent'?b.id-a.id:state.sort==='value'?b.potential_value-a.potential_value:b.score-a.score);}
 async function load(){const [leads,stats,sources,posts,freshPosts,publicStats]=await Promise.all([api('/api/leads'),api('/api/stats'),api('/api/public/sources'),api('/api/public/posts?status='+state.postStatus),api('/api/public/posts?status=fresh'),api('/api/public/stats')]);Object.assign(state,{leads,stats,sources,posts,freshPosts,publicStats});if(state.selectedId&&leads.some(l=>l.id===state.selectedId)){state.detail=await api('/api/leads/'+state.selectedId);}else{state.detail=null;}$('#navCount').textContent=stats.total;$('#publicCount').textContent=publicStats.review;render();}
-function route(page){state.view=page;state.selectedId=null;state.detail=null;state.filter='all';state.search='';$('#search').value='';$('#sidebar').classList.remove('open');render();}
-function render(){document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));$('#currentPage').textContent=viewNames[state.view]||'VOID LEADS';let html='';if(state.view==='dashboard')html=dashboard();else if(state.view==='public')html=publicHunter();else if(['leads','ad','map','partner','request'].includes(state.view))html=workspace();else if(state.view==='pipeline')html=pipeline();else html=settings();$('#content').innerHTML=html;}
+function route(page){state.view=page;if(page==='company')refreshCompany().catch(e=>toast(e.message,true));state.selectedId=null;state.detail=null;state.filter='all';state.search='';$('#search').value='';$('#sidebar').classList.remove('open');render();}
+function render(){document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===state.view));$('#currentPage').textContent=viewNames[state.view]||'VOID LEADS';let html='';if(state.view==='dashboard')html=dashboard();else if(state.view==='public')html=publicHunter();else if(state.view==='company')html=companyHunter();else if(['leads','ad','map','partner','request'].includes(state.view))html=workspace();else if(state.view==='pipeline')html=pipeline();else html=settings();$('#content').innerHTML=html;}
 function metric(label,value,iconName,foot,accent=false){return `<div class="metric glass"><div class="metric-top"><span>${esc(label)}</span>${ico(iconName)}</div><div class="metric-number ${accent?'accent-number':''}">${esc(value)}</div><div class="metric-foot">${esc(foot)}</div></div>`;}
 function dashboard(){const s=state.stats,p=state.publicStats;const newest=state.freshPosts.slice(0,5);return pageTitle('РАБОЧЕЕ ПРОСТРАНСТВО','Данил, свежие возможности — сегодня.','В основной ленте только реклама последних 24 часов. Остальные публикации уходят в архив, а подтверждённые компании остаются в CRM.',`<button class="btn soft" data-action="import-sources">${ico('upload')} Импорт пабликов CSV</button><button class="btn primary" data-view="public">${ico('megaphone')} Public Hunter</button>`)
  +`<div class="metric-grid">${metric('Моих пабликов',p.sources||0,'megaphone','Разные города и источники')}${metric('Перспективных за 24 ч',p.target_fresh||0,'bolt','Свежие компании в целевых нишах',true)}${metric('За последние 2 ч',p.hot||0,'activity','Самые горячие находки')}${metric('Оплачено',fmt(s.revenue||0)+' ₽','leads','По реальным закрытым сделкам')}</div>`
@@ -151,6 +151,18 @@ async function addNote(){const note=$('#noteInput').value.trim();if(!note)return
 async function doImportSources(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/public/sources/import','POST',{csv});await load();toast(`Паблики: ${r.added} новых, ${r.duplicates} дублей, ${r.invalid} ошибочных строк`);if(r.errors.length)toast(r.errors.slice(0,3).join(' | '),true);}catch(e){toast(e.message,true);}};input.click();}
 async function doImportCsv(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/import/csv','POST',{csv});await load();toast(`Импорт: ${r.created} новых, ${r.updated} повторов`);}catch(err){toast(err.message,true);}};input.click();}
 async function handleAction(element){const a=element.dataset.action;const id=element.dataset.id;
+ if(a==='company-batch'){
+  element.disabled=true;
+  try{const result=await api('/api/company/audit-batch','POST',{limit:8,niche:state.companyNiche});
+      state.companyJob=result;toast(result.message);await refreshCompany();}
+  catch(err){toast(err.message,true);element.disabled=false;}return;
+ }
+ if(a==='company-copy-draft'){
+  const company=state.companyEntries.find(x=>x.id===Number(id));
+  if(!company?.audit?.draft)return toast('Черновик пока не подготовлен',true);
+  try{await navigator.clipboard.writeText(company.audit.draft);toast('Черновик скопирован');}
+  catch{toast('Не удалось скопировать. Выдели текст вручную.',true);}return;
+ }
  if(a==='check-update'){
   element.disabled=true;const status=$('#updateState');status.textContent='Проверяем официальный выпуск...';
   try{const res=await api('/api/update/check');status.textContent=res.message+(res.available?` · ${res.latest}`:'');
@@ -216,13 +228,15 @@ window.addEventListener('DOMContentLoaded',async()=>{try{state.config=await api(
  document.addEventListener('click',async e=>{
   const close=e.target.closest('[data-close]');if(close){$('#'+close.dataset.close).close();return;}
   const nav=e.target.closest('[data-view]');if(nav){route(nav.dataset.view);if(nav.dataset.select){state.selectedId=Number(nav.dataset.select);await selectLead(state.selectedId);}return;}
+  const company=e.target.closest('[data-company]');if(company){state.companySelected=Number(company.dataset.company);render();return;}
   const sel=e.target.closest('[data-select]');if(sel){await selectLead(sel.dataset.select);return;}
   const act=e.target.closest('[data-action]');if(act){try{await handleAction(act);}catch(err){toast(err.message,true);}}
  });
  document.addEventListener('submit',async e=>{const id=e.target.id;if(!['leadForm','sourceForm','postForm','reviewForm','adForm','osmForm'].includes(id))return;e.preventDefault();if(id==='leadForm')return submitLead(e);if(id==='sourceForm')return submitSource(e);if(id==='postForm')return submitPost(e);if(id==='reviewForm')return submitReview(e);if(id==='adForm')return submitAd(e);if(id==='osmForm')return submitOsm(e);});
  document.addEventListener('toggle',e=>{if(e.target.id==='targetSettings')state.targetSettingsOpen=e.target.open;},true);
  document.addEventListener('input',e=>{if(e.target.matches('[data-target-niche]')){const label=$('#targetSelectionStatus');if(label)label.textContent='Выбрано направлений: '+document.querySelectorAll('[data-target-niche]:checked').length;}if(e.target.id==='sourceSearch'){state.sourceSearch=e.target.value;const el=$('#sourceCards');if(el)el.innerHTML=sourceCards();}});
- document.addEventListener('change',async e=>{if(e.target.id==='statusFilter'){state.filter=e.target.value;state.selectedId=null;state.detail=null;render();}if(e.target.id==='sortFilter'){state.sort=e.target.value;render();}if(e.target.id==='postStatus'){state.postStatus=e.target.value;await load();}if(e.target.id==='postSource'){state.postSource=e.target.value;render();}if(e.target.id==='targetNiche'){state.targetNiche=e.target.value;render();}if(e.target.id==='targetOnly'){state.targetOnly=e.target.checked;render();}
+ document.addEventListener('change',async e=>{if(e.target.id==='companyNiche'){state.companyNiche=e.target.value;state.companySelected=null;render();}
+ if(e.target.id==='statusFilter'){state.filter=e.target.value;state.selectedId=null;state.detail=null;render();}if(e.target.id==='sortFilter'){state.sort=e.target.value;render();}if(e.target.id==='postStatus'){state.postStatus=e.target.value;await load();}if(e.target.id==='postSource'){state.postSource=e.target.value;render();}if(e.target.id==='targetNiche'){state.targetNiche=e.target.value;render();}if(e.target.id==='targetOnly'){state.targetOnly=e.target.checked;render();}
  if(e.target.id==='enableNotifications'||e.target.id==='enableStartup'){
   const key=e.target.id==='enableNotifications'?'notifications':'startup';
   try{
@@ -232,6 +246,7 @@ window.addEventListener('DOMContentLoaded',async()=>{try{state.config=await api(
    toast('Настройка сохранена');
   }catch(err){e.target.checked=!e.target.checked;toast(err.message,true);}
  }if(e.target.id==='sourceKind'){const i=$('#sourceLocatorRow input');if(i)i.placeholder=e.target.value==='manual'?'https://t.me/channel':e.target.value==='rss'?'https://example.org/rss.xml':'https://vk.com/overhear.tula';}});
+ setInterval(()=>{if(state.view==='company'&&state.companyJob.state==='running')refreshCompany().catch(()=>{});},2500);
  setInterval(()=>{if(document.visibilityState==='visible'&&!document.querySelector('dialog[open]')&&!document.querySelector('#targetSettings[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))load().catch(()=>{});},60000);
  $('#createLead').addEventListener('click',()=>editModal());$('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
  $('#search').addEventListener('input',e=>{state.search=e.target.value;state.selectedId=null;state.detail=null;if(!['leads','ad','map','partner','request'].includes(state.view))state.view='leads';render();});
