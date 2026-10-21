@@ -1031,7 +1031,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_file(STATIC / "index.html")
             if path == "/favicon.ico":
                 return self.send_file(ROOT / "assets" / "void-leads.ico")
-            if path in {"/app.js", "/style.css", "/company-ui.js", "/company-ui.css"}:
+            if path in {"/app.js", "/style.css", "/company-ui.js", "/company-ui.css", "/source-hub.js", "/source-hub.css"}:
                 return self.send_file(STATIC / path.lstrip("/"))
             if path == "/api/config":
                 return self.send_json(200, {"cities": list(CITIES), "map_categories": list(CATEGORIES),
