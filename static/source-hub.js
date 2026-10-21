@@ -2,7 +2,10 @@
 /* Source Hub: distinguish working integrations from research links.
    Never claim manual websites are APIs or automatically ingested. */
 function sourceHub(){
-  const d=state.discovery||{}, v=state.vkDiscovery||{}, p=state.publicStats||{};
+  const d=state.discovery||{}, v=state.vkDiscovery||{};
+  const activeSources=(state.sources||[]).filter(s=>s.enabled);
+  const vkFeedCount=activeSources.filter(s=>s.kind==='vk').length;
+  const rssCount=activeSources.filter(s=>s.kind==='rss').length;
   const city=state.companyGeoCity||'Рязань';
   const niche=state.companyNiche==='all'?'furniture':(state.companyNiche||'furniture');
   const words={furniture:'изготовление кухонь на заказ мебельная фабрика',
@@ -17,9 +20,9 @@ function sourceHub(){
      note:'Официальная открытая база; ограниченный поиск предприятий раз в неделю',action:'company-discover',actionName:'Запустить'},
     {name:'Сообщества VK',kind:'auto',status:v.token_available?(v.enabled?'Автопоиск включён':'Ключ подключён'):'Нужен user-токен',
      note:'Три города × три ниши, проверка города в карточке компании',action:'company-vk-sweep',actionName:'Поиск 9 направлений',disabled:!v.token_available},
-    {name:'VK паблики',kind:'feeds',status:(p.sources||0)>0?'Есть источники':'Нужны паблики',
+    {name:'VK паблики',kind:'feeds',status:vkFeedCount>0?'Включено пабликов: '+vkFeedCount:'Нужны паблики',
      note:'Реклама локальных компаний в разрешённых источниках VK',view:'public',actionName:'Открыть Public Hunter'},
-    {name:'Отраслевые RSS',kind:'feeds',status:(p.sources||0)>0?'Настраиваются в Public Hunter':'Нужны RSS-ленты',
+    {name:'Отраслевые RSS',kind:'feeds',status:rssCount>0?'Включено RSS-лент: '+rssCount:'Нужны RSS-ленты',
      note:'Отраслевые публикации и объявления — только подключённые RSS',view:'public',actionName:'Добавить RSS'},
     {name:'OpenStreetMap',kind:'import',status:'Локальная выгрузка',
      note:'Городские GeoJSON с указанием OSM ID; источник и дубли сохраняются',action:'company-import-osm',actionName:'Импорт GeoJSON'},
@@ -58,5 +61,6 @@ function sourceHub(){
     '<code>'+esc(query)+'</code><button class="btn quiet small" data-action="source-query-copy">Скопировать запрос</button></div>'+
     '<div class="source-hub-grid">'+channels.map(display).join('')+'</div>'+
     '<p class="source-hub-footer">Не подключаем запрещённый массовый сбор и не рассылаем сообщения автоматически. '+
-    'Нельзя считать компанию готовой платить только на основании рекламы, вакансий или старого дизайна.</p></details>';
+    'Нельзя считать компанию готовой платить только на основании рекламы, вакансий или старого дизайна. '+
+    'Данные OSM используются с указанием источника и лицензии ODbL.</p></details>';
 }
