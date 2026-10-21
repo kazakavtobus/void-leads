@@ -29,6 +29,7 @@ function companyHunter(){
     '<span class="company-row-icon">'+esc((c.name||'?').charAt(0))+'</span>'+
     '<span class="company-row-info"><strong>'+esc(c.name)+'</strong><small>'+
     esc(c.city||'Город не указан')+' · '+esc((state.config.niches||{})[c.niche]||c.niche||'Другое')+
+    ' · '+esc(c.source_name||'Вручную')+
     '</small><span class="company-row-state">'+esc(stateLabel)+'</span></span>'+
     (checked?'<span class="company-score">'+a.score+'<small>/100</small></span>':'')+'</button>';
  }
@@ -42,7 +43,8 @@ function companyHunter(){
   const a=c.audit||{}, findings=a.findings||[], ideas=a.opportunities||[];
   return '<div class="eyebrow">КОММЕРЧЕСКАЯ ГИПОТЕЗА</div><h2>'+esc(c.name)+'</h2>'+
     '<p class="company-subtitle">'+esc(c.city||'Город не указан')+' · '+
-    esc((state.config.niches||{})[c.niche]||'Другая ниша')+'</p>'+
+    esc((state.config.niches||{})[c.niche]||'Другая ниша')+
+    ' · '+esc((statuses||{})[c.lead_status]||'Новый')+'</p>'+
     '<div class="company-detail-links">'+elink(c.website,'Открыть сайт')+
     (c.source_url?elink(c.source_url,'Источник'):'')+
     '<button class="btn quiet small" data-view="leads" data-select="'+c.id+'">Открыть CRM →</button></div>'+
