@@ -6,12 +6,12 @@ const fmt=n=>new Intl.NumberFormat('ru-RU').format(Number(n)||0);
 const safeLink=u=>{try{const url=new URL(u);return ['https:','http:'].includes(url.protocol)?url.href:'';}catch{return '';}};
 const date=s=>{try{return s?new Date(s).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Дата неизвестна';}catch{return 'Дата неизвестна';}};
 const viewNames={dashboard:'Обзор',public:'Public Hunter',company:'Company Hunter',leads:'База лидов',ad:'Добавить рекламу',map:'Map Hunter',partner:'Партнёры',request:'Прямые запросы',pipeline:'Воронка',settings:'Настройки'};
-const types={ad:'Местная реклама',map:'Карты / OSM',partner:'Партнёр',request:'Прямой запрос',manual:'Вручную'};
+const types={directory:'Бизнес-каталоги / VK',ad:'Местная реклама',map:'Карты / OSM',partner:'Партнёр',request:'Прямой запрос',manual:'Вручную'};
 const statuses={new:'Новый',research:'Проверка',ready:'Готов к контакту',contacted:'Связался',replied:'Ответили',won:'Оплачен',lost:'Отказ',skip:'Не подходит'};
 const webStatuses={unknown:'Не проверен',not_found:'Не обнаружен',found:'Есть сайт'};
 const kinds={vk:'VK API',rss:'RSS',manual:'Telegram / вручную'};
 const freshLabels={hot:'Горячее · 0–2 ч',fresh:'Свежая · до 24 ч',archive:'Архив · старше суток',undated:'Дата не указана'};
-let state={view:'dashboard',leads:[],sources:[],posts:[],freshPosts:[],stats:{},publicStats:{},config:{},selectedId:null,detail:null,filter:'all',sort:'score',search:'',postStatus:'fresh',postSource:'all',targetOnly:true,targetNiche:'all',targetSettingsOpen:false,sourceSearch:'',reviewId:null,companyEntries:[],companyJob:{state:'idle'},companyNiche:'all',companySelected:null,companyGeoCity:'Рязань',discovery:{state:'idle'} };
+let state={view:'dashboard',leads:[],sources:[],posts:[],freshPosts:[],stats:{},publicStats:{},config:{},selectedId:null,detail:null,filter:'all',sort:'score',search:'',postStatus:'fresh',postSource:'all',targetOnly:true,targetNiche:'all',targetSettingsOpen:false,sourceSearch:'',reviewId:null,companyEntries:[],companyJob:{state:'idle'},companyNiche:'all',companySelected:null,companyGeoCity:'Рязань',discovery:{state:'idle'},vkDiscovery:{state:'idle'},companyVkCity:'Рязань',companyVkNiche:'furniture' };
 async function api(url,method='GET',data){const options={method,headers:{'Content-Type':'application/json'}};if(data!==undefined)options.body=JSON.stringify(data);const r=await fetch(url,options);let body;try{body=await r.json();}catch{throw Error('Сервер вернул неверный ответ');}if(!r.ok)throw Error(body.error||`Ошибка ${r.status}`);return body;}
 function toast(msg,bad=false){const n=document.createElement('div');n.className='toast'+(bad?' error':'');n.textContent=msg;$('#toasts').append(n);setTimeout(()=>n.remove(),5500);}
 function elink(url,label){const safe=safeLink(url);return safe?`<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(label||safe)} ↗</a>`:'<span class="muted">Нет</span>';}
@@ -151,6 +151,14 @@ async function addNote(){const note=$('#noteInput').value.trim();if(!note)return
 async function doImportSources(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/public/sources/import','POST',{csv});await load();toast(`Паблики: ${r.added} новых, ${r.duplicates} дублей, ${r.invalid} ошибочных строк`);if(r.errors.length)toast(r.errors.slice(0,3).join(' | '),true);}catch(e){toast(e.message,true);}};input.click();}
 async function doImportCsv(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/import/csv','POST',{csv});await load();toast(`Импорт: ${r.created} новых, ${r.updated} повторов`);}catch(err){toast(err.message,true);}};input.click();}
 async function handleAction(element){const a=element.dataset.action;const id=element.dataset.id;
+ if(a==='company-vk-search'){
+  element.disabled=true;
+  try{
+    const result=await api('/api/company/vk/search','POST',
+       {city:state.companyVkCity,niche:state.companyVkNiche});
+    state.vkDiscovery=result;toast(result.message);await refreshCompany();
+  }catch(err){toast(err.message,true);element.disabled=false;}return;
+ }
  if(a==='company-discover'){
   element.disabled=true;
   try{const r=await api('/api/company/discover','POST',{});toast(r.message);await refreshCompany();}
@@ -257,6 +265,15 @@ window.addEventListener('DOMContentLoaded',async()=>{try{state.config=await api(
  document.addEventListener('toggle',e=>{if(e.target.id==='targetSettings')state.targetSettingsOpen=e.target.open;},true);
  document.addEventListener('input',e=>{if(e.target.matches('[data-target-niche]')){const label=$('#targetSelectionStatus');if(label)label.textContent='Выбрано направлений: '+document.querySelectorAll('[data-target-niche]:checked').length;}if(e.target.id==='sourceSearch'){state.sourceSearch=e.target.value;const el=$('#sourceCards');if(el)el.innerHTML=sourceCards();}});
  document.addEventListener('change',async e=>{if(e.target.id==='companyGeoCity'){state.companyGeoCity=e.target.value;}
+ if(e.target.id==='companyVkCity'){state.companyVkCity=e.target.value;}
+ if(e.target.id==='companyVkNiche'){state.companyVkNiche=e.target.value;}
+ if(e.target.id==='companyAutoVK'){
+   try{
+     const r=await api('/api/preferences','POST',{company_auto_vk:e.target.checked});
+     state.config.preferences=r.preferences;state.vkDiscovery.enabled=e.target.checked;
+     toast(e.target.checked?'Автоматический поиск компаний VK включён':'Автопоиск VK выключен');
+   }catch(err){e.target.checked=!e.target.checked;toast(err.message,true);}
+ }
  if(e.target.id==='companyAutoAudit'){
    try{
      const r=await api('/api/preferences','POST',{company_auto_audit:e.target.checked});
@@ -282,7 +299,7 @@ window.addEventListener('DOMContentLoaded',async()=>{try{state.config=await api(
    toast('Настройка сохранена');
   }catch(err){e.target.checked=!e.target.checked;toast(err.message,true);}
  }if(e.target.id==='sourceKind'){const i=$('#sourceLocatorRow input');if(i)i.placeholder=e.target.value==='manual'?'https://t.me/channel':e.target.value==='rss'?'https://example.org/rss.xml':'https://vk.com/overhear.tula';}});
- setInterval(()=>{if(state.view==='company'&&(state.companyJob.state==='running'||state.discovery.state==='running'))refreshCompany().catch(()=>{});},2500);
+ setInterval(()=>{if(state.view==='company'&&(state.companyJob.state==='running'||state.discovery.state==='running'||state.vkDiscovery.state==='running'))refreshCompany().catch(()=>{});},2500);
  setInterval(()=>{if(document.visibilityState==='visible'&&!document.querySelector('dialog[open]')&&!document.querySelector('#targetSettings[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))load().catch(()=>{});},60000);
  $('#createLead').addEventListener('click',()=>editModal());$('#menuBtn').addEventListener('click',()=>$('#sidebar').classList.toggle('open'));
  $('#search').addEventListener('input',e=>{state.search=e.target.value;state.selectedId=null;state.detail=null;if(!['leads','ad','map','partner','request'].includes(state.view))state.view='leads';render();});
