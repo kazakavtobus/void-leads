@@ -407,6 +407,7 @@ def discovery_status():
         else:
             state.update(last_attempt='',last_success='',last_result='',last_added=0)
     state['enabled']=bool(preferences().get('company_auto_discovery',False))
+    state['auto_audit']=bool(preferences().get('company_auto_audit',False))
     return state
 
 
