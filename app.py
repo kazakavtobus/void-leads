@@ -633,15 +633,22 @@ def company_queue(db, limit=100):
     for row in rows:
         company=dict(row)
         raw=company.pop('result_json')
+        sources={u for (u,) in db.execute(
+            "SELECT DISTINCT source_url FROM activities WHERE lead_id=? AND source_url!='' LIMIT 15",
+            (company['id'],)).fetchall()}
+        if company.get('source_url'):sources.add(company['source_url'])
+        company['source_count']=len(sources)
         company['audit']=json.loads(raw) if raw else {
             'status':'not_checked','score':0,'findings':[],'opportunities':[],
             'draft':'','question':'','disclaimer':'Аудит ещё не запускался'}
         if not company['website'] and company['audit']['status']=='not_checked':
             company['audit']['findings']=['Сайт не указан в базе; отсутствие сайта НЕ подтверждено']
         items.append(company)
-    items.sort(key=lambda c: (c['audit']['status']=='analyzed',
+    stage={'replied':5,'ready':4,'new':3,'research':2,'contacted':1}
+    items.sort(key=lambda c: (stage.get(c['lead_status'],0),
+                             c['audit']['status']=='analyzed',
                              c['audit']['score'],
-                             c['niche'] in SCAN_NICHES),reverse=True)
+                             c['source_count']),reverse=True)
     return items
 
 
