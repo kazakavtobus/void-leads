@@ -35,3 +35,16 @@
 @media(max-width:1100px){.company-work-grid{grid-template-columns:1fr}.company-rows{max-height:370px;grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.company-work-grid{gap:12px}.company-rows{grid-template-columns:1fr;max-height:420px}.company-list{padding:13px}.company-detail{padding:18px}.company-message{padding:14px}.company-detail-links .btn{margin-left:0}}
 @media(prefers-reduced-motion:reduce){.company-row{transition:none}}
+
+/* Company discovery source and import controls */
+.company-discovery{padding:20px 22px;border-radius:19px;margin:0 0 17px;min-width:0}
+.company-discovery-heading h2{margin:4px 0 6px;letter-spacing:-.6px;font-size:22px}
+.company-discovery-heading p{font-size:14px;color:#65758b;line-height:1.6;margin:0}
+.company-discovery-controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px 13px;margin-top:15px}
+.company-city-label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#7c8ba2;font-weight:650;min-width:180px}
+.company-city-label .control{min-height:41px}
+.company-auto-label{display:flex;align-items:center;gap:9px;color:#4b5b76;font-size:14px;font-weight:630;min-height:40px;cursor:pointer}
+.company-auto-label input{width:16px;height:16px;accent-color:#4f7cff}
+.company-discovery-foot{font-size:13px;color:#7b8da8;line-height:1.65;margin:14px 0 0}
+.company-discovery-foot a{color:#5078d8;text-decoration:underline}
+@media(max-width:650px){.company-discovery{padding:16px}.company-discovery-controls>.btn{width:100%}.company-city-label{width:100%}}
