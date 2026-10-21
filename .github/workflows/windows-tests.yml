@@ -18,6 +18,7 @@ jobs:
       - run: python -m pytest -q
       - run: node --check static/app.js
       - run: node --check static/company-ui.js
+      - run: node --check static/source-hub.js
       - run: python packaging/make_icon.py
       - name: Check icon exists
         shell: pwsh
