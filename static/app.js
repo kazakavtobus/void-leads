@@ -151,6 +151,17 @@ async function addNote(){const note=$('#noteInput').value.trim();if(!note)return
 async function doImportSources(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/public/sources/import','POST',{csv});await load();toast(`Паблики: ${r.added} новых, ${r.duplicates} дублей, ${r.invalid} ошибочных строк`);if(r.errors.length)toast(r.errors.slice(0,3).join(' | '),true);}catch(e){toast(e.message,true);}};input.click();}
 async function doImportCsv(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/import/csv','POST',{csv});await load();toast(`Импорт: ${r.created} новых, ${r.updated} повторов`);}catch(err){toast(err.message,true);}};input.click();}
 async function handleAction(element){const a=element.dataset.action;const id=element.dataset.id;
+ if(a==='source-query-copy'){
+  const key=state.companyNiche==='all'?'furniture':(state.companyNiche||'furniture');
+  const terms={furniture:'изготовление кухонь на заказ мебельная фабрика',
+    construction:'строительство домов строительная компания',
+    industrial:'производство металлоконструкций металлообработка',
+    equipment:'аренда спецтехники'};
+  const q=(terms[key]||terms.furniture)+' '+(state.companyGeoCity||'Рязань');
+  try{await navigator.clipboard.writeText(q);toast('Поисковый запрос скопирован');}
+  catch{toast('Не получилось скопировать поисковый запрос',true);}return;
+ }
+
  if(a==='company-vk-token-save'){
   const token=$('#companyVkUserToken')?.value.trim()||'';
   if(token.length<12){toast('Введи VK user token, а не логин или пароль',true);return;}
