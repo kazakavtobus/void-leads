@@ -151,6 +151,24 @@ async function addNote(){const note=$('#noteInput').value.trim();if(!note)return
 async function doImportSources(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/public/sources/import','POST',{csv});await load();toast(`Паблики: ${r.added} новых, ${r.duplicates} дублей, ${r.invalid} ошибочных строк`);if(r.errors.length)toast(r.errors.slice(0,3).join(' | '),true);}catch(e){toast(e.message,true);}};input.click();}
 async function doImportCsv(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/import/csv','POST',{csv});await load();toast(`Импорт: ${r.created} новых, ${r.updated} повторов`);}catch(err){toast(err.message,true);}};input.click();}
 async function handleAction(element){const a=element.dataset.action;const id=element.dataset.id;
+ if(a==='company-vk-token-save'){
+  const token=$('#companyVkUserToken')?.value.trim()||'';
+  if(token.length<12){toast('Введи VK user token, а не логин или пароль',true);return;}
+  element.disabled=true;
+  try{await api('/api/vk/user-token','POST',{token});await refreshCompany();toast('VK user token сохранён защищённо');}
+  catch(err){toast(err.message,true);element.disabled=false;}
+  return;
+ }
+ if(a==='company-vk-token-delete'){
+  if(!confirm('Отключить пользовательский ключ VK? Автопоиск VK будет выключен.'))return;
+  try{
+    await api('/api/vk/user-token','DELETE');
+    const r=await api('/api/preferences','POST',{company_auto_vk:false});
+    state.config.preferences=r.preferences;await refreshCompany();
+    toast('Пользовательский VK-токен отключён');
+  }catch(err){toast(err.message,true);}
+  return;
+ }
  if(a==='company-vk-search'){
   element.disabled=true;
   try{
