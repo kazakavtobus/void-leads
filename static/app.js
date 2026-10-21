@@ -257,6 +257,13 @@ window.addEventListener('DOMContentLoaded',async()=>{try{state.config=await api(
  document.addEventListener('toggle',e=>{if(e.target.id==='targetSettings')state.targetSettingsOpen=e.target.open;},true);
  document.addEventListener('input',e=>{if(e.target.matches('[data-target-niche]')){const label=$('#targetSelectionStatus');if(label)label.textContent='Выбрано направлений: '+document.querySelectorAll('[data-target-niche]:checked').length;}if(e.target.id==='sourceSearch'){state.sourceSearch=e.target.value;const el=$('#sourceCards');if(el)el.innerHTML=sourceCards();}});
  document.addEventListener('change',async e=>{if(e.target.id==='companyGeoCity'){state.companyGeoCity=e.target.value;}
+ if(e.target.id==='companyAutoAudit'){
+   try{
+     const r=await api('/api/preferences','POST',{company_auto_audit:e.target.checked});
+     state.config.preferences=r.preferences;state.discovery.auto_audit=e.target.checked;
+     toast(e.target.checked?'Ежедневный автоаудит включён':'Ежедневный автоаудит отключён');
+   }catch(err){e.target.checked=!e.target.checked;toast(err.message,true);}
+ }
  if(e.target.id==='companyAutoDiscovery'){
    try{
      const r=await api('/api/preferences','POST',{company_auto_discovery:e.target.checked});
