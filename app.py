@@ -55,7 +55,7 @@ _company_job_lock = threading.Lock()
 _company_job = {'state':'idle','total':0,'done':0,'ok':0,'errors':0,'message':''}
 PREFS_DEFAULT = {"notifications": True, "min_notification_score": 60,
                  "target_niches": DEFAULT_TARGET_NICHES.copy(),
-                 "company_auto_discovery": True}
+                 "company_auto_discovery": True, "company_auto_audit": True}
 
 def preferences():
     p = DATA_DIR / "settings.json"
@@ -470,6 +470,31 @@ def _run_discovery():
                                   total=result['total'],message='Поиск завершён; источник может содержать мало компаний')
 
 
+def maybe_start_auto_audit():
+    """At most eight queued site audits per day; separate from manual requests."""
+    from datetime import datetime, timezone, timedelta
+    if not preferences().get('company_auto_audit',False):
+        return
+    with _lock,closing(db_connection()) as db:
+        last=db.execute("SELECT last_attempt FROM discovery_runs WHERE provider='site_audit'").fetchone()
+        if last and last['last_attempt']:
+            since=datetime.now(timezone.utc)-datetime.fromisoformat(last['last_attempt'])
+            if since.total_seconds()<86400:
+                return
+    try:
+        started=start_company_batch(limit=8,niche='all')
+    except ValueError:
+        return  # A manual job is already in progress
+    if not started.get('total'):
+        return
+    with _lock,closing(db_connection()) as db:
+        db.execute("""
+            INSERT INTO discovery_runs(provider,last_attempt) VALUES('site_audit',?)
+            ON CONFLICT(provider) DO UPDATE SET last_attempt=excluded.last_attempt
+        """,(iso_now(),))
+        db.commit()
+
+
 def company_queue(db, limit=100):
     """A review queue of existing CRM businesses. Never predicts readiness to buy."""
     size=max(1,min(200,int(limit)))
@@ -789,6 +814,7 @@ def auto_check_loop(stop_event):
         try:
             if preferences().get('company_auto_discovery', False):
                 start_discovery(manual=False)
+            maybe_start_auto_audit()
         except Exception:
             pass
         try:
@@ -1005,6 +1031,11 @@ class Handler(BaseHTTPRequestHandler):
                         not isinstance(n,str) or n not in NICHE_NAMES for n in niches):
                         raise ValueError('Выбери хотя бы одну подходящую нишу')
                     fields['target_niches'] = list(dict.fromkeys(niches))
+                if 'company_auto_audit' in data:
+                    enabled=data['company_auto_audit']
+                    if not isinstance(enabled,bool):
+                        raise ValueError('Автоаудит должен быть true или false')
+                    fields['company_auto_audit']=enabled
                 if 'company_auto_discovery' in data:
                     enabled=data['company_auto_discovery']
                     if not isinstance(enabled,bool):
