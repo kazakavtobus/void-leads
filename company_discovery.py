@@ -124,7 +124,11 @@ def _osm_niche(tags):
         return "industrial"
     if ("shop", "rental") in pairs or ("shop", "trade") in pairs:
         # Generic rental and trade shops are not proven to sell heavy equipment.
-        return "equipment" if classify_text(tags.get("name", ""),tags.get("description", "")) == "equipment" else None
+        text=(str(tags.get("name",""))+" "+str(tags.get("description",""))).casefold()
+        relevant=("спецтехник","строительная техника","техника для строител",
+                  "экскаватор","погрузчик","автокран","трактор","heavy equipment",
+                  "machinery rental","equipment rental")
+        return "equipment" if any(term in text for term in relevant) else None
     return None
 
 
