@@ -1,4 +1,4 @@
-"""Windows DPAPI protection for the optional persisted VK service token.
+"""Windows DPAPI protection for optional separate VK service and user tokens.
 
 A token is encrypted for the current Windows account; no plaintext token is
 written to SQLite, settings, logs, or GitHub. On non-Windows persistence fails.
@@ -38,22 +38,28 @@ def _dpapi(data: bytes, decrypt: bool) -> bytes:
     finally:
         kernel32.LocalFree(ctypes.cast(dst.pbData, ctypes.c_void_p))
 
-def save_token(folder: Path, token: str):
+def _filename(name: str) -> str:
+    if name not in {"vk_token.dpapi", "vk_user_token.dpapi"}:
+        raise ValueError("Недопустимое имя защищённого ключа")
+    return name
+
+
+def save_token(folder: Path, token: str, filename: str = "vk_token.dpapi"):
     token = token.strip()
     if not 12 <= len(token) <= 2000:
         raise ValueError("Введи действующий VK-токен")
     folder.mkdir(exist_ok=True, parents=True)
     blob = _dpapi(token.encode("utf-8"), decrypt=False)
-    file = folder / "vk_token.dpapi"
+    file = folder / _filename(filename)
     temporary = file.with_suffix(".tmp")
     temporary.write_bytes(blob)
     temporary.replace(file)
 
-def load_token(folder: Path) -> str:
-    file = folder / "vk_token.dpapi"
+def load_token(folder: Path, filename: str = "vk_token.dpapi") -> str:
+    file = folder / _filename(filename)
     if not file.exists():
         return ""
     return _dpapi(file.read_bytes(), decrypt=True).decode("utf-8")
 
-def delete_token(folder: Path):
-    (folder / "vk_token.dpapi").unlink(missing_ok=True)
+def delete_token(folder: Path, filename: str = "vk_token.dpapi"):
+    (folder / _filename(filename)).unlink(missing_ok=True)
