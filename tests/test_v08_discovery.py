@@ -170,3 +170,23 @@ def test_background_sources_are_opt_in_by_default(tmp_path,monkeypatch):
     assert app.preferences()["company_auto_discovery"] is False
     assert app.preferences()["company_auto_audit"] is False
 
+
+def test_same_verified_site_deduplicates_aliases_without_merging_cities(tmp_path,monkeypatch):
+    monkeypatch.setattr(app,"DATA_DIR",tmp_path)
+    monkeypatch.setattr(app,"DB_PATH",tmp_path/"leads.sqlite3")
+    app.init_db(seed=False)
+    with app._lock,app.db_connection() as db:
+        old_id=app.insert_lead(db,{"name":"ООО Ваш стиль","city":"Рязань",
+                                   "niche":"furniture","website":"https://www.mebel-ryazane.ru/",
+                                   "status":"replied","notes":"Клиенту уже отправлена презентация"})
+        repeated,new=app.upsert(db,{"name":"Мебельная фабрика Ваш стиль","city":"Рязань",
+                                  "niche":"furniture","website":"http://mebel-ryazane.ru"})
+        assert new is False and repeated==old_id
+        third,fresh=app.upsert(db,{"name":"Филиал Ваш стиль","city":"Калуга",
+                               "niche":"furniture","website":"https://mebel-ryazane.ru/"})
+        assert fresh is True and third != old_id
+        old=db.execute("SELECT * FROM leads WHERE id=?",(old_id,)).fetchone()
+        assert old["status"]=="replied"
+        assert old["notes"]=="Клиенту уже отправлена презентация"
+        assert db.execute("SELECT COUNT(*) FROM leads WHERE demo=0").fetchone()[0]==2
+        db.commit()
