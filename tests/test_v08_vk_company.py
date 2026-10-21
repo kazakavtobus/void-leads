@@ -80,7 +80,7 @@ def test_vk_discovery_preserves_warm_contact_and_cooldown(tmp_path,monkeypatch):
     monkeypatch.setattr(app,"DB_PATH",tmp_path/"leads.sqlite3")
     monkeypatch.setattr(app,"_vk_company_job",
         {"state":"idle","added":0,"updated":0,"total":0,"done":0,"message":""})
-    monkeypatch.setattr(app,"authorized_vk_token",lambda:"fake-authorized-key")
+    monkeypatch.setattr(app,"authorized_vk_user_token",lambda:"fake-authorized-key")
     app.init_db(seed=False)
     with app._lock,app.db_connection() as db:
         existing=app.insert_lead(db,{
@@ -124,7 +124,7 @@ def test_vk_api_route_can_launch_job_with_config(tmp_path,monkeypatch):
     monkeypatch.setattr(app,"DB_PATH",tmp_path/"leads.sqlite3")
     monkeypatch.setattr(app,"_vk_company_job",
         {"state":"idle","added":0,"updated":0,"total":0,"done":0,"message":""})
-    monkeypatch.setattr(app,"authorized_vk_token",lambda:"fake-authorized-key")
+    monkeypatch.setattr(app,"authorized_vk_user_token",lambda:"fake-authorized-key")
     monkeypatch.setattr(app,"search_vk",lambda city,niche,token:[])
     app.init_db(seed=False)
     server=app.ThreadingHTTPServer(("127.0.0.1",0),app.Handler)
@@ -158,3 +158,21 @@ def test_vk_ui_and_engine_source_exist():
     client=(Path(__file__).resolve().parents[1]/"static"/"app.js").read_text("utf8")
     assert "company-vk-search" in ui and "companyAutoVK" in ui
     assert "/api/company/vk/search" in client
+
+
+def test_vk_group_search_does_not_fall_back_to_service_token(tmp_path,monkeypatch):
+    monkeypatch.setattr(app,"DATA_DIR",tmp_path)
+    monkeypatch.setattr(app,"DB_PATH",tmp_path/"leads.sqlite3")
+    monkeypatch.setattr(app,"authorized_vk_token",lambda:"working-service-token")
+    monkeypatch.setattr(app,"authorized_vk_user_token",lambda:"")
+    app.init_db(seed=False)
+    with pytest.raises(ValueError,match="токен пользователя"):
+        app.start_vk_company_search("Рязань","furniture",manual=True)
+
+
+def test_separate_protected_token_name_is_whitelisted():
+    from secure_store import _filename
+    assert _filename("vk_token.dpapi")=="vk_token.dpapi"
+    assert _filename("vk_user_token.dpapi")=="vk_user_token.dpapi"
+    with pytest.raises(ValueError):
+        _filename("../../other.txt")
