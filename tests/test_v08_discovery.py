@@ -44,6 +44,7 @@ def test_wikidata_matches_only_targeted_industries_and_provenance():
 
 def test_wikidata_query_is_narrow_and_api_mockable():
     assert "Q2746" in QUERY and "Q2770" in QUERY and "Q2837" in QUERY
+    assert "Q4830453" in QUERY and "Q783794" in QUERY
     assert "LIMIT 240" in QUERY
     assert discover_wikidata(fetcher=lambda: {"results":{"bindings":[]}})==[]
 
@@ -154,3 +155,18 @@ def test_discovery_ui_controls_present():
     assert "company-discover" in ui and "company-import-osm" in ui
     assert "company-auto-label" in ui
     assert "/api/company/import-geojson" in appjs
+
+def test_nonbusiness_historic_structures_are_not_prospects():
+    raw={"results":{"bindings":[
+        wiki_record("Q55555","Q2770","Хозяйственная постройка усадьбы Лугиных","памятник архитектуры"),
+        wiki_record("Q55556","Q2770","СтройТула","Строительная компания"),
+    ]}}
+    out=parse_wikidata(raw)
+    assert len(out)==1 and out[0]["name"]=="СтройТула"
+
+
+def test_background_sources_are_opt_in_by_default(tmp_path,monkeypatch):
+    monkeypatch.setattr(app,"DATA_DIR",tmp_path)
+    assert app.preferences()["company_auto_discovery"] is False
+    assert app.preferences()["company_auto_audit"] is False
+
