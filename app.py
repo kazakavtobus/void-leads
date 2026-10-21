@@ -32,6 +32,7 @@ from freshness import freshness, iso_publication, publication_time, DEFAULT_CHEC
 from source_import import read_source_csv, validate_source, template_csv
 from release_config import APP_VERSION, RELEASE_REPO
 from updates import latest_release
+from company_hunter import audit_company, SCAN_NICHES
 from update_state import read_status, write_status
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -47,6 +48,8 @@ _single_mutex = None
 _update_in_progress = False
 _update_key = ''
 _browser_processes = []
+_company_job_lock = threading.Lock()
+_company_job = {'state':'idle','total':0,'done':0,'ok':0,'errors':0,'message':''}
 PREFS_DEFAULT = {"notifications": True, "min_notification_score": 60,
                  "target_niches": DEFAULT_TARGET_NICHES.copy()}
 
@@ -127,6 +130,13 @@ def init_db(seed: bool = True):
                 kind TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', source_url TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS company_audits (
+                lead_id INTEGER PRIMARY KEY REFERENCES leads(id) ON DELETE CASCADE,
+                status TEXT NOT NULL, score INTEGER NOT NULL DEFAULT 0,
+                checked_at TEXT NOT NULL DEFAULT '', site_url TEXT NOT NULL DEFAULT '',
+                result_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS company_audits_score ON company_audits(score);
             CREATE TABLE IF NOT EXISTS public_sources (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL, city TEXT NOT NULL DEFAULT '',
@@ -357,6 +367,100 @@ def upsert(db, data: dict, advert=False):
     if advert:
         log_activity(db, pk, "advert", "Первая рекламная публикация", d.get("source_url", ""))
     return pk, True
+
+
+def company_queue(db, limit=100):
+    """A review queue of existing CRM businesses. Never predicts readiness to buy."""
+    size=max(1,min(200,int(limit)))
+    rows=db.execute("""
+        SELECT l.id,l.name,l.city,l.niche,l.website,l.phone,l.email,l.status AS lead_status,
+               l.source_type,l.source_url, a.result_json, a.checked_at
+        FROM leads l LEFT JOIN company_audits a ON a.lead_id=l.id
+        WHERE l.demo=0 AND l.status NOT IN ('won','lost','skip')
+        ORDER BY l.updated_at DESC LIMIT ?
+    """,(size,)).fetchall()
+    items=[]
+    for row in rows:
+        company=dict(row)
+        raw=company.pop('result_json')
+        company['audit']=json.loads(raw) if raw else {
+            'status':'not_checked','score':0,'findings':[],'opportunities':[],
+            'draft':'','question':'','disclaimer':'Аудит ещё не запускался'}
+        if not company['website'] and company['audit']['status']=='not_checked':
+            company['audit']['findings']=['Сайт не указан в базе; отсутствие сайта НЕ подтверждено']
+        items.append(company)
+    items.sort(key=lambda c: (c['audit']['status']=='analyzed',
+                             c['audit']['score'],
+                             c['niche'] in SCAN_NICHES),reverse=True)
+    return items
+
+
+def start_company_batch(limit=8, niche='all'):
+    """Run at most one bounded job, never upload content or message businesses."""
+    global _company_job
+    if isinstance(limit,bool) or not isinstance(limit,int) or limit<1 or limit>10:
+        raise ValueError('За один запуск можно проверить от 1 до 10 компаний')
+    if niche!='all' and niche not in SCAN_NICHES:
+        raise ValueError('Неизвестная ниша Company Hunter')
+    with _company_job_lock:
+        if _company_job['state']=='running':
+            raise ValueError('Проверка компаний уже выполняется')
+        from datetime import datetime, timezone, timedelta
+        cutoff=(datetime.now(timezone.utc)-timedelta(days=7)).isoformat()
+        with _lock, closing(db_connection()) as db:
+            where=["l.demo=0","l.website != ''","l.status NOT IN ('won','lost','skip')",
+                   "(a.checked_at IS NULL OR a.checked_at < ?)"]
+            params=[cutoff]
+            if niche!='all':
+                where.append('l.niche=?');params.append(niche)
+            params.append(limit)
+            selected=[dict(r) for r in db.execute(
+                "SELECT l.id,l.name,l.city,l.niche,l.website "
+                "FROM leads l LEFT JOIN company_audits a ON a.lead_id=l.id "
+                "WHERE "+' AND '.join(where)+" ORDER BY l.updated_at DESC LIMIT ?",params
+            ).fetchall()]
+        _company_job={'state':'running' if selected else 'done','total':len(selected),'done':0,
+                      'ok':0,'errors':0,'message':'Проверяем главные страницы сайтов' if selected
+                      else 'Новых сайтов для проверки нет — прошлые аудиты актуальны 7 дней'}
+        if selected:
+            threading.Thread(target=_run_company_batch,args=(selected,),daemon=True,
+                             name='CompanyHunterAudit').start()
+        return dict(_company_job)
+
+
+def _run_company_batch(selected):
+    import time
+    try:
+        for i, lead in enumerate(selected):
+            result=audit_company(lead)
+            with _lock, closing(db_connection()) as db:
+                db.execute("""
+                    INSERT INTO company_audits(lead_id,status,score,checked_at,site_url,result_json)
+                    VALUES(?,?,?,?,?,?)
+                    ON CONFLICT(lead_id) DO UPDATE SET
+                    status=excluded.status, score=excluded.score,
+                    checked_at=excluded.checked_at, site_url=excluded.site_url,
+                    result_json=excluded.result_json
+                """,(lead['id'],result['status'],result['score'],result['checked_at'],
+                      result['url'],json.dumps(result,ensure_ascii=False)))
+                db.commit()
+            with _company_job_lock:
+                _company_job['done']+=1
+                if result['status']=='analyzed':
+                    _company_job['ok']+=1
+                else:
+                    _company_job['errors']+=1
+                _company_job['message']=f"Проверено {_company_job['done']} из {_company_job['total']}"
+            if i<len(selected)-1:
+                time.sleep(1.3)
+    except Exception:
+        with _company_job_lock:
+            _company_job['state']='failed'
+            _company_job['message']='Не удалось завершить пакет; повтори позже'
+    else:
+        with _company_job_lock:
+            _company_job['state']='done'
+            _company_job['message']='Пакетная проверка завершена'
 
 
 def get_leads(db, query):
@@ -655,6 +759,15 @@ class Handler(BaseHTTPRequestHandler):
                                             "preferences": preferences(), "target_niche_names":NICHE_NAMES,
                                             "startup_enabled": is_startup_enabled(),
                                             "tray_available": bool(_tray and _tray.icon)})
+            if path == "/api/company/queue":
+                with _lock, closing(db_connection()) as db:
+                    result=company_queue(db)
+                with _company_job_lock:
+                    job=dict(_company_job)
+                return self.send_json(200, {'companies':result,'job':job})
+            if path == "/api/company/job":
+                with _company_job_lock:
+                    return self.send_json(200,dict(_company_job))
             if path == "/api/update/check":
                 return self.send_json(200, latest_release())
             if path == "/api/update/progress":
@@ -738,6 +851,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {"error": "Недопустимый источник запроса"})
         try:
             data = {} if method == "DELETE" else self.read_body()
+            if path == '/api/company/audit-batch' and method == 'POST':
+                if not isinstance(data,dict):
+                    raise ValueError('Ожидается объект настроек')
+                job=start_company_batch(data.get('limit',8),data.get('niche','all'))
+                return self.send_json(200,job)
             if path == '/api/notifications/test' and method == 'POST':
                 available=bool(_tray and _tray.notify("VOID LEADS · проверка",
                     "Данил, уведомления на твоём компьютере работают!"))
