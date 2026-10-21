@@ -88,15 +88,20 @@ function companyHunter(){
     ['Рязань','Тула','Калуга'].map(c=>'<option value="'+esc(c)+'" '+(state.companyVkCity===c?'selected':'')+'>'+esc(c)+'</option>').join('')+'</select></label>'+
     '<label class="company-city-label">Ниша<select id="companyVkNiche" class="control">'+
     options({furniture:'Мебель и кухни',construction:'Строительство',industrial:'Производство'},state.companyVkNiche)+'</select></label>'+
-    '<button class="btn primary" data-action="company-vk-search" '+(vk.state==='running'?'disabled':'')+'>'+ico('search')+
+    '<button class="btn primary" data-action="company-vk-search" '+(vk.state==='running'||!vk.token_available?'disabled':'')+'>'+ico('search')+
     (vk.state==='running'?' VK: проверяем…':' Найти бизнесы в VK')+'</button>'+
-    '<label class="company-auto-label"><input type="checkbox" id="companyAutoVK" '+(vk.enabled?'checked':'')+
+    '<label class="company-auto-label"><input type="checkbox" id="companyAutoVK" '+
+    (vk.enabled?'checked ':'')+(!vk.token_available?'disabled ':'')+
     '/> Автопоиск VK (9 комбинаций в сутки)</label>'+
-    (!vk.token_available?'<button class="btn soft" data-view="public">Подключить ключ VK →</button>':'')+'</div>'+
+    (vk.token_available?
+      '<span class="company-token-ready">Пользовательский ключ VK подключён</span><button class="btn quiet small" data-action="company-vk-token-delete">Отключить ключ</button>':
+      '<label class="company-token-label">Пользовательский ключ VK для groups.search<input id="companyVkUserToken" type="password" autocomplete="new-password" placeholder="Вставить VK user token" /></label>'+
+      '<button class="btn soft" data-action="company-vk-token-save">Защищённо сохранить</button>')+
+    '</div>'+
     '<p class="company-discovery-foot">'+esc(vk.message||'Сервис не запускался')+
     (vk.state==='running'?' · '+vk.done+'/'+vk.total:'')+
     '. '+(vk.state==='done'?'Новых компаний: '+Number(vk.added||0)+'. ':'')+
-    'Нужен ключ VK API с правами на поиск сообществ. Некорректные или неподходящие страницы не считаем клиентами.</p></section>'+
+    'Для groups.search требуется именно USER-токен VK с нужными правами; прежний сервисный ключ для стен не подходит. На Windows токен сохраняется через DPAPI. Не вводи пароль VK — нужен только полученный официально токен. Некорректные или неподходящие страницы не считаем клиентами.</p></section>'+
     '<div class="notes-grid">'+
       '<div class="note-kpi glass"><strong>'+companies.length+'</strong><span>Компаний в выборке</span></div>'+
       '<div class="note-kpi glass"><strong>'+inspected+'</strong><span>HTML проверен</span></div>'+
