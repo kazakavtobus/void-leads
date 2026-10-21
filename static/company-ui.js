@@ -1,9 +1,11 @@
 'use strict';
 /* Company Hunter — self-contained view integrated with the existing CRM globals. */
 async function refreshCompany(){
- const response=await api('/api/company/queue');
+ const responses=await Promise.all([api('/api/company/queue'),api('/api/company/discovery')]);
+ const response=responses[0];
  state.companyEntries=response.companies||[];
  state.companyJob=response.job||{state:'idle'};
+ state.discovery=responses[1];
  if(state.view==='company')render();
 }
 function companyHunter(){
@@ -14,6 +16,7 @@ function companyHunter(){
  const selected=companies.find(function(c){return c.id===state.companySelected;})||companies[0];
  const job=state.companyJob||{state:'idle'};
  const running=job.state==='running';
+ const discovery=state.discovery||{state:'idle',last_added:0,enabled:true};
  const niches={all:'Все направления',furniture:'Мебель и кухни',construction:'Строительство',
                industrial:'Производство',equipment:'Спецтехника'};
  function card(c){
@@ -52,11 +55,25 @@ function companyHunter(){
       ico('copy')+' Скопировать черновик</button></div>':'')+
     '<p class="hint">'+esc(a.disclaimer||'Проверка пока не запускалась.')+'</p>';
  }
+ const active=discovery.state==='running';
+ const discoveryText=active?'Wikidata: выполняется поиск':
+   discovery.state==='failed'?'Wikidata: источник временно недоступен':
+   discovery.last_success?'Последняя успешная проверка '+date(discovery.last_success):
+   'Источник ещё не проверялся';
  return pageTitle('ПОИСК / 02','Company Hunter',
     'Анализируем сайты компаний из CRM и ищем конкретные поводы для полезного предложения. Без автоматических рассылок.',
     '<button class="btn soft" data-view="map">'+ico('map')+' Найти компании в OSM</button>'+
     '<button class="btn primary" data-action="company-batch" '+(running?'disabled':'')+'>'+
     ico('refresh')+' '+(running?'Проверка идёт…':'Проверить до 8 сайтов')+'</button>')+
+    '<section class="company-discovery glass"><div class="company-discovery-heading"><div><span class="eyebrow">ПОИСК КОМПАНИЙ</span><h2>Автоматическое пополнение базы</h2><p>Официальные публичные данные Wikidata и региональные выгрузки OpenStreetMap. Без рассылок и обещания найти 50 клиентов из одного источника.</p></div></div>'+
+    '<div class="company-discovery-controls"><button class="btn soft" data-action="company-discover" '+(active?'disabled':'')+'>'+ico('search')+' '+(active?'Ищем компании…':'Поиск по Wikidata')+'</button>'+
+    '<label class="company-city-label">Город для выгрузки OSM<select id="companyGeoCity" class="control"><option value="Рязань" '+(state.companyGeoCity==='Рязань'?'selected':'')+'>Рязань</option><option value="Тула" '+(state.companyGeoCity==='Тула'?'selected':'')+'>Тула</option><option value="Калуга" '+(state.companyGeoCity==='Калуга'?'selected':'')+'>Калуга</option></select></label>'+
+    '<button class="btn soft" data-action="company-import-osm">'+ico('upload')+' Импорт GeoJSON</button>'+
+    '<label class="company-auto-label"><input type="checkbox" id="companyAutoDiscovery" '+(discovery.enabled?'checked':'')+'/> Автопоиск раз в неделю</label></div>'+
+    '<p class="company-discovery-foot">'+esc(discoveryText)+
+    '. За прошлую проверку добавлено: '+Number(discovery.last_added||0)+
+    '. Для OSM загрузи локальный GeoJSON с проверяемыми OSM ID. Карты © OpenStreetMap contributors (ODbL). '+
+    '<a href="https://extract.bbbike.org/" target="_blank" rel="noopener noreferrer">Получить выгрузку ↗</a></p></section>'+
     '<div class="notes-grid">'+
       '<div class="note-kpi glass"><strong>'+companies.length+'</strong><span>Компаний в выборке</span></div>'+
       '<div class="note-kpi glass"><strong>'+inspected+'</strong><span>HTML проверен</span></div>'+
