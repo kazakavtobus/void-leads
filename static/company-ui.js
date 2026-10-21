@@ -90,6 +90,8 @@ function companyHunter(){
     options({furniture:'Мебель и кухни',construction:'Строительство',industrial:'Производство'},state.companyVkNiche)+'</select></label>'+
     '<button class="btn primary" data-action="company-vk-search" '+(vk.state==='running'||!vk.token_available?'disabled':'')+'>'+ico('search')+
     (vk.state==='running'?' VK: проверяем…':' Найти бизнесы в VK')+'</button>'+
+    '<button class="btn soft" data-action="company-vk-sweep" '+(vk.state==='running'||!vk.token_available?'disabled':'')+
+    '>'+ico('refresh')+' Запустить все 9 направлений</button>'+
     '<label class="company-auto-label"><input type="checkbox" id="companyAutoVK" '+
     (vk.enabled?'checked ':'')+(!vk.token_available?'disabled ':'')+
     '/> Автопоиск VK (9 комбинаций в сутки)</label>'+
