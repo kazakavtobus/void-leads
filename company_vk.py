@@ -83,7 +83,12 @@ def city_confirmed(group, city):
     # Avoid trusting search query geography; group-owned description/name
     # must identify the target city, otherwise this is unverified.
     text=" ".join(str(group.get(k) or "") for k in ("name","description","status","activity")).casefold()
-    return city.casefold() in text
+    forms={
+        "Рязань":("рязань","рязани","рязанск"),
+        "Тула":("тула","туле","тулы","тулой","тульск"),
+        "Калуга":("калуга","калуге","калуги","калужск"),
+    }
+    return any(form in text for form in forms.get(city,()))
 
 
 def parse_vk_groups(groups, city, niche):
