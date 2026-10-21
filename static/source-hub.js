@@ -60,7 +60,8 @@ function sourceHub(){
     '</span><span class="source-hub-arrow">▾</span></summary>'+
     '<div class="source-hub-top"><p>Список показывает реальный способ доступа к каждому источнику. '+
     '«Открыть» не означает, что канал автоматически собирает данные. Для подбора компаний в поисковиках используем запрос:</p>'+
-    '<code>'+esc(query)+'</code><button class="btn quiet small" data-action="source-query-copy">Скопировать запрос</button></div>'+
+    '<code>'+esc(query)+'</code><button class="btn quiet small" data-action="source-query-copy">Скопировать запрос</button>'+
+    '<button class="btn primary small" data-action="source-run-all">Запустить доступные автоисточники →</button></div>'+
     '<div class="source-hub-grid">'+channels.map(display).join('')+'</div>'+
     '<p class="source-hub-footer">Не подключаем запрещённый массовый сбор и не рассылаем сообщения автоматически. '+
     'Нельзя считать компанию готовой платить только на основании рекламы, вакансий или старого дизайна. '+
