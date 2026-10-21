@@ -24,6 +24,8 @@ function sourceHub(){
      note:'Реклама локальных компаний в разрешённых источниках VK',view:'public',actionName:'Открыть Public Hunter'},
     {name:'Отраслевые RSS',kind:'feeds',status:rssCount>0?'Включено RSS-лент: '+rssCount:'Нужны RSS-ленты',
      note:'Отраслевые публикации и объявления — только подключённые RSS',view:'public',actionName:'Добавить RSS'},
+    {name:'Сайты организаций',kind:'auto',status:d.auto_audit?'Автоаудит включён':'Проверка по кнопке',
+     note:'Проверка HTML и публичных ссылок на почту, телефон, MAX, Telegram или VK',action:'company-batch',actionName:'Проверить до 8'},
     {name:'OpenStreetMap',kind:'import',status:'Локальная выгрузка',
      note:'Городские GeoJSON с указанием OSM ID; источник и дубли сохраняются',action:'company-import-osm',actionName:'Импорт GeoJSON'},
     {name:'Map Hunter',kind:'import',status:'По запросу',
