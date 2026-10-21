@@ -1138,6 +1138,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {"error": "Недопустимый источник запроса"})
         try:
             data = {} if method == "DELETE" else self.read_body()
+            if path == '/api/company/vk/sweep' and method == 'POST':
+                return self.send_json(200,start_vk_company_search(manual=False))
             if path == '/api/company/vk/search' and method == 'POST':
                 if not isinstance(data,dict):
                     raise ValueError('Укажи город и нишу')
