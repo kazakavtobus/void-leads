@@ -25,7 +25,7 @@ MAX_GEOJSON_BYTES = 16_000_000
 MAX_IMPORT_ROWS = 600
 MATCHERS = {
     "furniture": ("мебел", "кухн", "столяр", "furniture", "kitchen", "cabinet", "joinery"),
-    "construction": ("строител", "строй", "домостро", "construction", "building company", "house builder"),
+    "construction": ("строител", "домостро", "construction company", "house builder", "construction firm"),
     "industrial": ("металл", "завод", "производств", "фабрик", "меткон", "металло",
                    "машиностро", "manufactur", "factory", "industrial", "metal", "plant"),
     "equipment": ("спецтехник", "аренд", "строительн техник", "excavator", "equipment rental"),
@@ -36,6 +36,8 @@ QUERY = """SELECT DISTINCT ?item ?city ?itemLabel ?itemDescription ?website WHER
  VALUES ?city { wd:Q2746 wd:Q2770 wd:Q2837 }
  ?item (wdt:P159|wdt:P131) ?city .
  ?item wdt:P31 ?kind .
+ VALUES ?businessType { wd:Q4830453 wd:Q6881511 wd:Q783794 }
+ ?kind wdt:P279* ?businessType .
  FILTER NOT EXISTS { ?item wdt:P576 ?endDate }
  OPTIONAL { ?item wdt:P856 ?website }
  SERVICE wikibase:label { bd:serviceParam wikibase:language "ru,en". }
@@ -60,6 +62,13 @@ def _wikidata_response():
 
 def classify_text(*values):
     source = " ".join(str(v or "") for v in values).casefold()
+    # Buildings, landmarks and estates are not construction suppliers. Wikidata
+    # contains many historical objects with construction-related names.
+    if any(bad in source for bad in ("усадьб","памятник архитектуры","historic building",
+                                    "architectural monument","постройка усадьбы")):
+        return None
+    if re.search(r"\bстрой[\w-]*", source):
+        return "construction"
     for niche in ("furniture", "construction", "industrial", "equipment"):
         if any(term in source for term in MATCHERS[niche]):
             return niche
