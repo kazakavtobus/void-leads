@@ -43,7 +43,8 @@ DATA_DIR = Path(os.environ.get("VOID_LEADS_DATA", str(Path.home() / "VOID-LEADS"
 DB_PATH = DATA_DIR / "leads.sqlite3"
 _lock = threading.RLock()
 _last_osm_request = 0.0
-_session_vk_token = ""  # RAM, or recoverable via Windows DPAPI on opted-in devices
+_session_vk_token = ""  # service token for walls
+_session_vk_user_token = ""  # separate user token for groups.search, Windows DPAPI
 _tray = None
 _server = None
 _single_mutex = None
@@ -84,6 +85,22 @@ def save_preferences(**fields):
 def token_available():
     return bool(_session_vk_token or os.environ.get("VOID_VK_TOKEN") or
                 (DATA_DIR / "vk_token.dpapi").is_file())
+
+def vk_user_token_available():
+    return bool(_session_vk_user_token or os.environ.get("VOID_VK_USER_TOKEN") or
+                (DATA_DIR / "vk_user_token.dpapi").is_file())
+
+
+def authorized_vk_user_token():
+    if _session_vk_user_token:
+        return _session_vk_user_token
+    if os.environ.get("VOID_VK_USER_TOKEN"):
+        return os.environ["VOID_VK_USER_TOKEN"]
+    try:
+        return load_token(DATA_DIR,filename="vk_user_token.dpapi")
+    except (ValueError,OSError,RuntimeError):
+        return ""
+
 
 def authorized_vk_token():
     if _session_vk_token:
@@ -525,7 +542,7 @@ def vk_company_status():
         ).fetchall()]
     result['runs']=all_runs[:16]
     result['enabled']=bool(preferences().get('company_auto_vk',False))
-    result['token_available']=token_available()
+    result['token_available']=vk_user_token_available()
     return result
 
 
@@ -535,9 +552,9 @@ def start_vk_company_search(city='Рязань', niche='furniture', manual=True)
     import datetime
     if city not in VK_CITIES or niche not in VK_TERMS:
         raise ValueError("Выбери подходящий город и нишу поиска VK")
-    token=authorized_vk_token()
+    token=authorized_vk_user_token()
     if not token:
-        if manual: raise ValueError('Сначала подключи официальный ключ VK в Public Hunter')
+        if manual: raise ValueError('Для groups.search нужен токен пользователя VK. Подключи его в Company Hunter')
         return dict(_vk_company_job)
     pairs=[(city,niche)] if manual else [
         (c,n) for c in VK_CITIES for n in VK_TERMS]
@@ -1109,7 +1126,7 @@ class Handler(BaseHTTPRequestHandler):
         self.write_route("DELETE")
 
     def write_route(self, method):
-        global _last_osm_request, _session_vk_token, _update_in_progress, _update_key
+        global _last_osm_request, _session_vk_token, _session_vk_user_token, _update_in_progress, _update_key
         path = urlparse(self.path).path
         parts = path.strip("/").split("/")
         # Avoid localhost cross-site form/posts and DNS rebinding surprises.
@@ -1146,6 +1163,15 @@ class Handler(BaseHTTPRequestHandler):
                 available=bool(_tray and _tray.notify("VOID LEADS · проверка",
                     "Данил, уведомления на твоём компьютере работают!"))
                 return self.send_json(200, {'ok':available})
+            if path == '/api/vk/user-token' and method == 'POST':
+                token = str(data.get('token','')).strip()
+                save_token(DATA_DIR,token,filename="vk_user_token.dpapi")
+                _session_vk_user_token=token
+                return self.send_json(200,{'ok':True,'saved':True})
+            if path == '/api/vk/user-token' and method == 'DELETE':
+                delete_token(DATA_DIR,filename="vk_user_token.dpapi")
+                _session_vk_user_token=''
+                return self.send_json(200,{'ok':True,'saved':False})
             if path == '/api/vk/token' and method == 'POST':
                 token = str(data.get('token','')).strip()
                 save_token(DATA_DIR,token)
