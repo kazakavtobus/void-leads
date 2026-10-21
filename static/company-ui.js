@@ -69,7 +69,8 @@ function companyHunter(){
     '<div class="company-discovery-controls"><button class="btn soft" data-action="company-discover" '+(active?'disabled':'')+'>'+ico('search')+' '+(active?'Ищем компании…':'Поиск по Wikidata')+'</button>'+
     '<label class="company-city-label">Город для выгрузки OSM<select id="companyGeoCity" class="control"><option value="Рязань" '+(state.companyGeoCity==='Рязань'?'selected':'')+'>Рязань</option><option value="Тула" '+(state.companyGeoCity==='Тула'?'selected':'')+'>Тула</option><option value="Калуга" '+(state.companyGeoCity==='Калуга'?'selected':'')+'>Калуга</option></select></label>'+
     '<button class="btn soft" data-action="company-import-osm">'+ico('upload')+' Импорт GeoJSON</button>'+
-    '<label class="company-auto-label"><input type="checkbox" id="companyAutoDiscovery" '+(discovery.enabled?'checked':'')+'/> Автопоиск раз в неделю</label></div>'+
+    '<label class="company-auto-label"><input type="checkbox" id="companyAutoDiscovery" '+(discovery.enabled?'checked':'')+'/> Автопоиск раз в неделю</label>'+
+    '<label class="company-auto-label"><input type="checkbox" id="companyAutoAudit" '+(discovery.auto_audit?'checked':'')+'/> Автоаудит до 8 сайтов в сутки</label></div>'+
     '<p class="company-discovery-foot">'+esc(discoveryText)+
     '. За прошлую проверку добавлено: '+Number(discovery.last_added||0)+
     '. Для OSM загрузи локальный GeoJSON с проверяемыми OSM ID. Карты © OpenStreetMap contributors (ODbL). '+
