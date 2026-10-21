@@ -177,12 +177,63 @@ class _PageInfo(HTMLParser):
             self._text.append(value)
 
 
+def business_contact_links(links: list[str]) -> dict:
+    """Only collect explicit public contact links from one business homepage.
+
+    No personal profile harvesting and no following links. Returned data is an
+    unverified suggestion to review before starting an outreach conversation.
+    """
+    emails=[]
+    phones=[]
+    messengers=[]
+    seen=set()
+    for raw in links[:500]:
+        link=(raw or "").strip()[:500]
+        if not link:
+            continue
+        low=link.casefold()
+        if low.startswith("mailto:"):
+            email=link[7:].split("?",1)[0].strip().lower()
+            if re.fullmatch(r"[A-Za-z0-9_.+%-]{1,80}@[A-Za-z0-9.-]{1,130}\.[A-Za-z]{2,16}",email):
+                if email not in seen and len(emails)<3:
+                    emails.append(email);seen.add(email)
+        elif low.startswith("tel:"):
+            number=link[4:].split("?",1)[0].strip()
+            if re.fullmatch(r"[+0-9() .-]{7,32}",number):
+                key="tel:"+re.sub(r"\D","",number)
+                if key not in seen and len(phones)<3:
+                    phones.append(number);seen.add(key)
+        else:
+            try:
+                parsed=urlsplit(link)
+            except ValueError:
+                continue
+            if parsed.scheme!="https" or not parsed.hostname or parsed.username or parsed.password:
+                continue
+            host=parsed.hostname.lower().removeprefix("www.")
+            kind={
+                "max.ru":"MAX","t.me":"Telegram","telegram.me":"Telegram",
+                "vk.com":"VK","vk.ru":"VK","wa.me":"WhatsApp",
+            }.get(host)
+            if not kind or len(messengers)>=5:
+                continue
+            # Do not store generic homepage links to the messenger provider.
+            if (not parsed.path or parsed.path=="/") and not parsed.query:
+                continue
+            clean=parsed._replace(fragment="").geturl()[:300]
+            if clean not in seen:
+                messengers.append({"kind":kind,"url":clean})
+                seen.add(clean)
+    return {"emails":emails,"phones":phones,"messengers":messengers}
+
+
 def audit_html(lead: dict, html: str, url: str = "") -> dict:
     """Grounded technical/content signals. Never claim an observed sales loss."""
     info = _PageInfo()
     info.feed(html[:MAX_PAGE_BYTES])
     words = " ".join(info._text + info.headings + info.h1).lower()
     link_text = " ".join(info.links).lower()
+    contact_suggestions = business_contact_links(info.links)
     target = lead.get("niche", "other")
     findings = []
     opportunities = []
@@ -234,6 +285,7 @@ def audit_html(lead: dict, html: str, url: str = "") -> dict:
              f"Если актуально, могу показать короткий пример решения.")
     return {
         "status": "analyzed", "score": score, "url": url,
+        "contact_suggestions": contact_suggestions,
         "findings": findings[:12], "opportunities": opportunities[:8],
         "draft": draft, "question": question,
         "method": "static_html_only",

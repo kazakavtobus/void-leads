@@ -54,3 +54,11 @@
 .company-token-label input:focus{border-color:#739bff;box-shadow:0 0 0 3px #6596ff1c}
 .company-token-ready{color:#386ba6;font-size:13px;font-weight:650}
 @media(max-width:650px){.company-token-label{max-width:none;width:100%;flex:0 0 100%}}
+
+/* Public business contacts found from a company's own homepage */
+.company-contact-section{padding:15px 17px;background:#f3f7ff;border:1px solid #dce6fa;border-radius:15px;margin:0 0 17px}
+.company-contact-section h3{font-size:16px;color:#365074;margin:0 0 12px}
+.company-contact-links{display:flex;flex-wrap:wrap;gap:9px}
+.company-contact-links a{display:inline-flex;align-items:center;border-radius:10px;padding:8px 10px;background:#fff;border:1px solid #dce5f5;font-weight:650;font-size:13px;color:#4b6db1;overflow-wrap:anywhere;max-width:100%}
+.company-contact-links a:hover{border-color:#87a8e9;background:#fdfefe}
+.company-contact-section .hint{font-size:12px;color:#72829a;line-height:1.6;margin:12px 0 0}
