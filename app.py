@@ -517,7 +517,7 @@ def company_queue(db, limit=100):
     size=max(1,min(200,int(limit)))
     rows=db.execute("""
         SELECT l.id,l.name,l.city,l.niche,l.website,l.phone,l.email,l.status AS lead_status,
-               l.source_type,l.source_url, a.result_json, a.checked_at
+               l.source_type,l.source_name,l.source_url, a.result_json, a.checked_at
         FROM leads l LEFT JOIN company_audits a ON a.lead_id=l.id
         WHERE l.demo=0 AND l.status NOT IN ('won','lost','skip')
         ORDER BY l.updated_at DESC LIMIT ?
