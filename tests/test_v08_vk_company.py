@@ -176,3 +176,25 @@ def test_separate_protected_token_name_is_whitelisted():
     assert _filename("vk_user_token.dpapi")=="vk_user_token.dpapi"
     with pytest.raises(ValueError):
         _filename("../../other.txt")
+
+
+def test_manual_one_click_sweep_plans_all_nine_segments(tmp_path,monkeypatch):
+    monkeypatch.setattr(app,"DATA_DIR",tmp_path)
+    monkeypatch.setattr(app,"DB_PATH",tmp_path/"leads.sqlite3")
+    monkeypatch.setattr(app,"_vk_company_job",
+        {"state":"idle","added":0,"updated":0,"total":0,"done":0,"message":""})
+    monkeypatch.setattr(app,"authorized_vk_user_token",lambda:"valid-user-test-token")
+    observed=[]
+    monkeypatch.setattr(app,"_run_vk_company",lambda pairs,token:observed.extend(pairs))
+    app.init_db(seed=False)
+    job=app.start_vk_company_search(manual=False)
+    assert job["total"]==9
+    for _ in range(100):
+        if len(observed)==9:break
+        time.sleep(.01)
+    assert len(observed)==9
+    assert len(set(observed))==9
+    with app.db_connection() as db:
+        assert db.execute(
+            "SELECT COUNT(*) FROM discovery_runs WHERE provider LIKE 'vk_company:%'"
+        ).fetchone()[0] == 10
