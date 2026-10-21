@@ -169,6 +169,13 @@ async function handleAction(element){const a=element.dataset.action;const id=ele
   }catch(err){toast(err.message,true);}
   return;
  }
+ if(a==='company-vk-sweep'){
+  element.disabled=true;
+  try{
+    const result=await api('/api/company/vk/sweep','POST',{});
+    state.vkDiscovery=result;toast(result.message);await refreshCompany();
+  }catch(err){toast(err.message,true);element.disabled=false;}return;
+ }
  if(a==='company-vk-search'){
   element.disabled=true;
   try{
