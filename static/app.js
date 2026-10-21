@@ -151,6 +151,32 @@ async function addNote(){const note=$('#noteInput').value.trim();if(!note)return
 async function doImportSources(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/public/sources/import','POST',{csv});await load();toast(`Паблики: ${r.added} новых, ${r.duplicates} дублей, ${r.invalid} ошибочных строк`);if(r.errors.length)toast(r.errors.slice(0,3).join(' | '),true);}catch(e){toast(e.message,true);}};input.click();}
 async function doImportCsv(){const input=document.createElement('input');input.type='file';input.accept='.csv,text/csv';input.onchange=async()=>{if(!input.files[0])return;try{const csv=await input.files[0].text();const r=await api('/api/import/csv','POST',{csv});await load();toast(`Импорт: ${r.created} новых, ${r.updated} повторов`);}catch(err){toast(err.message,true);}};input.click();}
 async function handleAction(element){const a=element.dataset.action;const id=element.dataset.id;
+ if(a==='source-run-all'){
+  element.disabled=true;
+  const jobs=[{name:'Wikidata',path:'/api/company/discover',data:{}},
+              {name:'Аудит сайтов',path:'/api/company/audit-batch',data:{limit:8,niche:'all'}}];
+  if(state.vkDiscovery?.token_available){
+    jobs.push({name:'Бизнес-сообщества VK',path:'/api/company/vk/sweep',data:{}});
+  }
+  const results=await Promise.allSettled(jobs.map(job=>api(job.path,'POST',job.data)));
+  const started=[],skipped=[];
+  results.forEach((r,i)=>{
+    const name=jobs[i].name;
+    if(r.status==='rejected'){
+      skipped.push(name+': '+r.reason.message);
+    }else if(r.value.state==='running'){
+      started.push(name);
+    }else{
+      skipped.push(name+': '+(r.value.message||'новых заданий нет'));
+    }
+  });
+  if(!state.vkDiscovery?.token_available)skipped.push('VK: нужен пользовательский ключ');
+  try{await refreshCompany();}catch(e){toast(e.message,true);}
+  toast('Запущено: '+(started.join(', ')||'ничего')+'. '+(skipped.length?'Остальные: '+skipped.join('; '):'') ,!started.length);
+  if(element.isConnected)element.disabled=false;
+  return;
+ }
+
  if(a==='source-query-copy'){
   const key=state.companyNiche==='all'?'furniture':(state.companyNiche||'furniture');
   const terms={furniture:'изготовление кухонь на заказ мебельная фабрика',
