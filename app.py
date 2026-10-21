@@ -34,6 +34,7 @@ from release_config import APP_VERSION, RELEASE_REPO
 from updates import latest_release
 from company_hunter import audit_company, SCAN_NICHES
 from company_discovery import discover_wikidata, parse_osm_geojson, CITY_IDS
+from company_vk import search_vk, CITIES as VK_CITIES, TERMS as VK_TERMS
 from update_state import read_status, write_status
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -49,13 +50,16 @@ _single_mutex = None
 _update_in_progress = False
 _update_key = ''
 _browser_processes = []
+_vk_company_lock = threading.Lock()
+_vk_company_job = {'state':'idle','added':0,'updated':0,'total':0,'done':0,'message':''}
 _discovery_lock = threading.Lock()
 _discovery_job = {'state':'idle','added':0,'updated':0,'total':0,'message':''}
 _company_job_lock = threading.Lock()
 _company_job = {'state':'idle','total':0,'done':0,'ok':0,'errors':0,'message':''}
 PREFS_DEFAULT = {"notifications": True, "min_notification_score": 60,
                  "target_niches": DEFAULT_TARGET_NICHES.copy(),
-                 "company_auto_discovery": False, "company_auto_audit": False}
+                 "company_auto_discovery": False, "company_auto_audit": False,
+                 "company_auto_vk": False}
 
 def preferences():
     p = DATA_DIR / "settings.json"
@@ -512,6 +516,109 @@ def maybe_start_auto_audit():
         db.commit()
 
 
+def vk_company_status():
+    with _vk_company_lock:
+        result=dict(_vk_company_job)
+    with _lock,closing(db_connection()) as db:
+        all_runs=[dict(x) for x in db.execute(
+            "SELECT * FROM discovery_runs WHERE provider LIKE 'vk_company:%' ORDER BY last_attempt DESC"
+        ).fetchall()]
+    result['runs']=all_runs[:16]
+    result['enabled']=bool(preferences().get('company_auto_vk',False))
+    result['token_available']=token_available()
+    return result
+
+
+def start_vk_company_search(city='Рязань', niche='furniture', manual=True):
+    """Either one requested pair or a daily, opt-in nine-pair discovery sweep."""
+    global _vk_company_job
+    import datetime
+    if city not in VK_CITIES or niche not in VK_TERMS:
+        raise ValueError("Выбери подходящий город и нишу поиска VK")
+    token=authorized_vk_token()
+    if not token:
+        if manual: raise ValueError('Сначала подключи официальный ключ VK в Public Hunter')
+        return dict(_vk_company_job)
+    pairs=[(city,niche)] if manual else [
+        (c,n) for c in VK_CITIES for n in VK_TERMS]
+    stamp=datetime.datetime.now(datetime.timezone.utc)
+    with _vk_company_lock:
+        if _vk_company_job['state']=='running':
+            if manual: raise ValueError('Поиск компаний VK уже выполняется')
+            return dict(_vk_company_job)
+        with _lock,closing(db_connection()) as db:
+            last=db.execute("SELECT last_attempt FROM discovery_runs WHERE provider='vk_company:all'").fetchone()
+            if not manual and last and last['last_attempt']:
+                if (stamp-datetime.datetime.fromisoformat(last['last_attempt'])).total_seconds()<86400:
+                    return dict(_vk_company_job)
+            eligible=[]
+            for c,n in pairs:
+                provider=f'vk_company:{c}:{n}'
+                prev=db.execute("SELECT last_attempt FROM discovery_runs WHERE provider=?",(provider,)).fetchone()
+                if prev and prev['last_attempt']:
+                    interval=3600 if manual else 86400
+                    if (stamp-datetime.datetime.fromisoformat(prev['last_attempt'])).total_seconds()<interval:
+                        continue
+                eligible.append((c,n))
+            if not eligible:
+                if manual: raise ValueError('Повторный поиск этой пары VK доступен через час')
+                return dict(_vk_company_job)
+            if not manual:
+                db.execute("""
+                    INSERT INTO discovery_runs(provider,last_attempt) VALUES('vk_company:all',?)
+                    ON CONFLICT(provider) DO UPDATE SET last_attempt=excluded.last_attempt
+                """,(stamp.isoformat(),))
+            for c,n in eligible:
+                key=f'vk_company:{c}:{n}'
+                db.execute("""
+                    INSERT INTO discovery_runs(provider,last_attempt) VALUES(?,?)
+                    ON CONFLICT(provider) DO UPDATE SET last_attempt=excluded.last_attempt
+                """,(key,stamp.isoformat()))
+            db.commit()
+        _vk_company_job={'state':'running','added':0,'updated':0,'total':len(eligible),'done':0,
+                         'message':'Ищем бизнес-сообщества через VK API'}
+        threading.Thread(target=_run_vk_company,args=(eligible,token),daemon=True,
+                         name='CompanyVKDiscovery').start()
+        return dict(_vk_company_job)
+
+
+def _run_vk_company(pairs,token):
+    import time
+    failed=0
+    for i,(city,niche) in enumerate(pairs):
+        provider=f'vk_company:{city}:{niche}'
+        result=None
+        try:
+            found=search_vk(city,niche,token)
+            with _lock,closing(db_connection()) as db:
+                result=import_discovered(db,found,provider)
+                db.execute("""
+                    UPDATE discovery_runs SET last_success=?,last_result=?,
+                        last_added=?,last_updated=? WHERE provider=?
+                """,(iso_now(),'ok',result['added'],result['updated'],provider))
+                db.commit()
+        except Exception:
+            failed+=1
+            with _lock,closing(db_connection()) as db:
+                db.execute("UPDATE discovery_runs SET last_result=? WHERE provider=?",
+                           ("Ошибка доступа VK или источника",provider))
+                db.commit()
+        with _vk_company_lock:
+            _vk_company_job['done']+=1
+            if result is not None:
+                _vk_company_job['added']+=result['added']
+                _vk_company_job['updated']+=result['updated']
+            _vk_company_job['message']=(
+                f"VK: проверено {_vk_company_job['done']} из {_vk_company_job['total']} "
+                f"· новых {_vk_company_job['added']}")
+        if i<len(pairs)-1:
+            time.sleep(1.2)
+    with _vk_company_lock:
+        _vk_company_job['state']='failed' if failed==len(pairs) else 'done'
+        if failed:
+            _vk_company_job['message']+=f" · не удалось проверить {failed} направлений"
+
+
 def company_queue(db, limit=100):
     """A review queue of existing CRM businesses. Never predicts readiness to buy."""
     size=max(1,min(200,int(limit)))
@@ -832,6 +939,8 @@ def auto_check_loop(stop_event):
             if preferences().get('company_auto_discovery', False):
                 start_discovery(manual=False)
             maybe_start_auto_audit()
+            if preferences().get('company_auto_vk',False):
+                start_vk_company_search(manual=False)
         except Exception:
             pass
         try:
@@ -920,6 +1029,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(200,dict(_company_job))
             if path == "/api/company/discovery":
                 return self.send_json(200,discovery_status())
+            if path == "/api/company/vk":
+                return self.send_json(200,vk_company_status())
             if path == "/api/update/check":
                 return self.send_json(200, latest_release())
             if path == "/api/update/progress":
@@ -1003,6 +1114,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {"error": "Недопустимый источник запроса"})
         try:
             data = {} if method == "DELETE" else self.read_body()
+            if path == '/api/company/vk/search' and method == 'POST':
+                if not isinstance(data,dict):
+                    raise ValueError('Укажи город и нишу')
+                result=start_vk_company_search(city=data.get('city','Рязань'),
+                                                niche=data.get('niche','furniture'),manual=True)
+                return self.send_json(200,result)
             if path == '/api/company/discover' and method == 'POST':
                 return self.send_json(200,start_discovery(manual=True))
             if path == '/api/company/import-geojson' and method == 'POST':
@@ -1048,6 +1165,11 @@ class Handler(BaseHTTPRequestHandler):
                         not isinstance(n,str) or n not in NICHE_NAMES for n in niches):
                         raise ValueError('Выбери хотя бы одну подходящую нишу')
                     fields['target_niches'] = list(dict.fromkeys(niches))
+                if 'company_auto_vk' in data:
+                    enabled=data['company_auto_vk']
+                    if not isinstance(enabled,bool):
+                        raise ValueError('Автопоиск VK должен быть true или false')
+                    fields['company_auto_vk']=enabled
                 if 'company_auto_audit' in data:
                     enabled=data['company_auto_audit']
                     if not isinstance(enabled,bool):
