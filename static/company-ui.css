@@ -48,3 +48,9 @@
 .company-discovery-foot{font-size:13px;color:#7b8da8;line-height:1.65;margin:14px 0 0}
 .company-discovery-foot a{color:#5078d8;text-decoration:underline}
 @media(max-width:650px){.company-discovery{padding:16px}.company-discovery-controls>.btn{width:100%}.company-city-label{width:100%}}
+
+.company-token-label{display:flex;flex-direction:column;gap:6px;color:#5c6f89;font-size:12px;font-weight:700;max-width:260px;flex:1;min-width:180px}
+.company-token-label input{font-size:14px;border:1px solid #d7e0ef;background:#fff;padding:11px 13px;border-radius:11px;color:#2b3b56;width:100%;outline:none}
+.company-token-label input:focus{border-color:#739bff;box-shadow:0 0 0 3px #6596ff1c}
+.company-token-ready{color:#386ba6;font-size:13px;font-weight:650}
+@media(max-width:650px){.company-token-label{max-width:none;width:100%;flex:0 0 100%}}
