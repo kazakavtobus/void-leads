@@ -23,6 +23,11 @@ def test_source_hub_is_served_and_actions_work():
     assert '"/source-hub.js"' in server and '"/source-hub.css"' in server
     assert "sourceHub()" in ui
     assert "source-query-copy" in main
+    assert "source-run-all" in main
+    assert "source-run-all" in (ROOT/"static/source-hub.js").read_text("utf-8")
+    assert "/api/company/vk/sweep" in main
+    assert "/api/company/discover" in main
+    assert "/api/company/audit-batch" in main
     assert (ROOT/"static/source-hub.css").is_file()
 
 def test_external_search_links_are_encoded_and_manual():
