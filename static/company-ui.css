@@ -1,0 +1,37 @@
+/* Company Hunter v0.8 pilot — light glass review queue */
+.company-message{display:flex;align-items:flex-start;gap:13px;padding:17px 19px;border-radius:16px;margin-bottom:17px;background:linear-gradient(110deg,#f4f7ffdd,#ffffffed);border:1px solid #dce5f4}
+.company-message>.ic{flex-shrink:0;color:#557be0;width:23px;height:23px}
+.company-message strong{display:block;font-size:16px;color:#2f4365;margin-bottom:4px}
+.company-message p{margin:0;font-size:14px;color:#697c98;line-height:1.65}
+.company-work-grid{display:grid;grid-template-columns:minmax(280px,.9fr) minmax(0,1.3fr);gap:17px;align-items:start}
+.company-list{border-radius:19px;padding:18px;min-width:0}
+.company-list-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.company-list-head h2{font-size:20px;letter-spacing:-.5px;margin:0}
+.company-filter-label{display:flex;flex-direction:column;gap:7px;color:#697994;font-size:14px;font-weight:650;margin:14px 0}
+.company-rows{display:grid;gap:9px;max-height:880px;overflow:auto;scrollbar-width:thin;padding:2px}
+.company-row{width:100%;display:flex;gap:12px;align-items:center;text-align:left;border:1px solid #e2e8f3;background:#fffdfcbd;border-radius:14px;padding:13px 12px;cursor:pointer;transition:border-color .2s,background .2s}
+.company-row:hover{border-color:#a9c0ff;background:#f7faff}
+.company-row.selected{border-color:#7197ff;background:#edf3ff;box-shadow:inset 3px 0 #4f7cff}
+.company-row-icon{display:grid;place-items:center;flex:0 0 39px;height:39px;border-radius:11px;background:#eaf0ff;color:#4d72d0;font-size:20px;font-weight:750}
+.company-row-info{min-width:0;flex:1;display:flex;flex-direction:column;gap:4px}
+.company-row-info strong{font-size:15px;color:#2b3b56;line-height:1.35;overflow-wrap:anywhere}
+.company-row-info small{font-size:13px;color:#8796ab;line-height:1.45;overflow-wrap:anywhere}
+.company-row-state{font-size:12px;color:#6480b2;font-weight:650}
+.company-score{font-size:19px;font-weight:800;color:#456cd4;align-self:start}
+.company-score small{font-size:11px;font-weight:600;color:#8b99aa}
+.company-detail{padding:27px;border-radius:19px;min-height:470px;min-width:0}
+.company-detail>h2{margin:7px 0 4px;font-size:clamp(23px,2.7vw,31px);letter-spacing:-.8px;overflow-wrap:anywhere}
+.company-subtitle{margin:0 0 15px;color:#7e8da4;font-size:15px}
+.company-detail-links{display:flex;flex-wrap:wrap;align-items:center;gap:13px;font-size:14px;font-weight:650;margin-bottom:20px}
+.company-detail-links .btn{margin-left:auto}
+.company-section{padding:18px 0;border-top:1px solid #e8edf5}
+.company-section h3,.company-draft h3{font-size:17px;color:#33465f;margin:0 0 11px}
+.company-evidence{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.company-evidence li{font-size:14px;line-height:1.55;color:#5c6d85;padding-left:17px;position:relative}
+.company-evidence li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:#6993ff}
+.company-draft{border:1px solid #dbe5fa;background:#f4f7ff;border-radius:16px;padding:17px}
+.company-draft p{white-space:pre-wrap;color:#465975;font-size:15px;line-height:1.65;margin:0 0 14px}
+.company-draft .btn{border-color:#cad9fd}
+@media(max-width:1100px){.company-work-grid{grid-template-columns:1fr}.company-rows{max-height:370px;grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.company-work-grid{gap:12px}.company-rows{grid-template-columns:1fr;max-height:420px}.company-list{padding:13px}.company-detail{padding:18px}.company-message{padding:14px}.company-detail-links .btn{margin-left:0}}
+@media(prefers-reduced-motion:reduce){.company-row{transition:none}}
