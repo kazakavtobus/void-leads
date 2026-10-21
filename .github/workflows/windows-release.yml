@@ -34,6 +34,7 @@ jobs:
         run: |
           node --check static/app.js
           node --check static/company-ui.js
+          node --check static/source-hub.js
 
       - name: Resolve release version
         id: version
