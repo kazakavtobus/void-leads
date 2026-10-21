@@ -44,6 +44,11 @@ function companyHunter(){
  function detail(c){
   if(!c)return noData('Добавь первые компании','Импортируй CSV в базу лидов или воспользуйся Map Hunter.');
   const a=c.audit||{}, findings=a.findings||[], ideas=a.opportunities||[];
+  const contacts=a.contact_suggestions||{};
+  const mails=(contacts.emails||[]).map(x=>'<a href="mailto:'+esc(x)+'">'+esc(x)+'</a>');
+  const phones=(contacts.phones||[]).map(x=>'<a href="tel:'+esc(x.replace(/[^0-9+]/g,''))+'">'+esc(x)+'</a>');
+  const messengers=(contacts.messengers||[]).map(x=>elink(x.url,x.kind));
+  const contactLinks=[...mails,...phones,...messengers];
   return '<div class="eyebrow">КОММЕРЧЕСКАЯ ГИПОТЕЗА</div><h2>'+esc(c.name)+'</h2>'+
     '<p class="company-subtitle">'+esc(c.city||'Город не указан')+' · '+
     esc((state.config.niches||{})[c.niche]||'Другая ниша')+
@@ -51,6 +56,9 @@ function companyHunter(){
     '<div class="company-detail-links">'+elink(c.website,'Открыть сайт')+
     (c.source_url?elink(c.source_url,'Источник'):'')+
     '<button class="btn quiet small" data-view="leads" data-select="'+c.id+'">Открыть CRM →</button></div>'+
+    (contactLinks.length?'<div class="company-contact-section"><h3>Публичные контакты с главной страницы</h3>'+
+       '<div class="company-contact-links">'+contactLinks.join('')+'</div>'+
+       '<p class="hint">Ссылки найдены в HTML сайта. Прежде чем писать, проверь, что контакт действительно принадлежит этой компании.</p></div>':'')+
     '<div class="company-section"><h3>Что действительно обнаружено</h3>'+
     evidence(findings,'Сайт ещё не анализировался. Запусти пакетную проверку.')+'</div>'+
     '<div class="company-section"><h3>Возможные улучшения</h3>'+
@@ -70,6 +78,7 @@ function companyHunter(){
     '<button class="btn soft" data-view="map">'+ico('map')+' Найти компании в OSM</button>'+
     '<button class="btn primary" data-action="company-batch" '+(running?'disabled':'')+'>'+
     ico('refresh')+' '+(running?'Проверка идёт…':'Проверить до 8 сайтов')+'</button>')+
+    sourceHub()+
     '<section class="company-discovery glass"><div class="company-discovery-heading"><div><span class="eyebrow">ПОИСК КОМПАНИЙ</span><h2>Автоматическое пополнение базы</h2><p>Официальные публичные данные Wikidata и региональные выгрузки OpenStreetMap. Без рассылок и обещания найти 50 клиентов из одного источника.</p></div></div>'+
     '<div class="company-discovery-controls"><button class="btn soft" data-action="company-discover" '+(active?'disabled':'')+'>'+ico('search')+' '+(active?'Ищем компании…':'Поиск по Wikidata')+'</button>'+
     '<label class="company-city-label">Город для выгрузки OSM<select id="companyGeoCity" class="control"><option value="Рязань" '+(state.companyGeoCity==='Рязань'?'selected':'')+'>Рязань</option><option value="Тула" '+(state.companyGeoCity==='Тула'?'selected':'')+'>Тула</option><option value="Калуга" '+(state.companyGeoCity==='Калуга'?'selected':'')+'>Калуга</option></select></label>'+
