@@ -33,6 +33,7 @@ from source_import import read_source_csv, validate_source, template_csv
 from release_config import APP_VERSION, RELEASE_REPO
 from updates import latest_release
 from company_hunter import audit_company, SCAN_NICHES
+from company_discovery import discover_wikidata, parse_osm_geojson, CITY_IDS
 from update_state import read_status, write_status
 
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -48,10 +49,13 @@ _single_mutex = None
 _update_in_progress = False
 _update_key = ''
 _browser_processes = []
+_discovery_lock = threading.Lock()
+_discovery_job = {'state':'idle','added':0,'updated':0,'total':0,'message':''}
 _company_job_lock = threading.Lock()
 _company_job = {'state':'idle','total':0,'done':0,'ok':0,'errors':0,'message':''}
 PREFS_DEFAULT = {"notifications": True, "min_notification_score": 60,
-                 "target_niches": DEFAULT_TARGET_NICHES.copy()}
+                 "target_niches": DEFAULT_TARGET_NICHES.copy(),
+                 "company_auto_discovery": True}
 
 def preferences():
     p = DATA_DIR / "settings.json"
@@ -129,6 +133,14 @@ def init_db(seed: bool = True):
                 id INTEGER PRIMARY KEY AUTOINCREMENT, lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
                 kind TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', source_url TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS discovery_runs (
+                provider TEXT PRIMARY KEY,
+                last_attempt TEXT NOT NULL DEFAULT '',
+                last_success TEXT NOT NULL DEFAULT '',
+                last_result TEXT NOT NULL DEFAULT '',
+                last_added INTEGER NOT NULL DEFAULT 0,
+                last_updated INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS company_audits (
                 lead_id INTEGER PRIMARY KEY REFERENCES leads(id) ON DELETE CASCADE,
@@ -367,6 +379,95 @@ def upsert(db, data: dict, advert=False):
     if advert:
         log_activity(db, pk, "advert", "Первая рекламная публикация", d.get("source_url", ""))
     return pk, True
+
+
+def import_discovered(db, records, source_label):
+    """Preserve live CRM statuses; merge with existing name+city records."""
+    added=updated=0
+    # Bound every import transaction and keep map provenance in lead activity.
+    for item in records[:600]:
+        if not item.get('source_url') or not item.get('name') or not item.get('city'):
+            continue
+        _,new=upsert(db,item)
+        added+=bool(new)
+        updated+=not new
+    return {'added':added,'updated':updated,'total':added+updated,'source':source_label}
+
+
+def discovery_status():
+    with _discovery_lock:
+        state=dict(_discovery_job)
+    with _lock,closing(db_connection()) as db:
+        row=db.execute("SELECT * FROM discovery_runs WHERE provider='wikidata'").fetchone()
+        if row:
+            state['last_attempt']=row['last_attempt']
+            state['last_success']=row['last_success']
+            state['last_result']=row['last_result']
+            state['last_added']=row['last_added']
+        else:
+            state.update(last_attempt='',last_success='',last_result='',last_added=0)
+    state['enabled']=bool(preferences().get('company_auto_discovery',False))
+    return state
+
+
+def start_discovery(manual=False):
+    """Start one official API request, at most weekly or on a limited manual retry."""
+    global _discovery_job
+    import datetime
+    now=datetime.datetime.now(datetime.timezone.utc)
+    with _discovery_lock:
+        if _discovery_job['state']=='running':
+            if manual: raise ValueError('Поиск компаний уже выполняется')
+            return dict(_discovery_job)
+        with _lock,closing(db_connection()) as db:
+            previous=db.execute("SELECT last_attempt,last_success FROM discovery_runs WHERE provider='wikidata'").fetchone()
+            if previous and previous['last_attempt']:
+                timestamp=datetime.datetime.fromisoformat(previous['last_attempt'])
+                age=(now-timestamp).total_seconds()
+                if age<(3600 if manual else 7*24*3600):
+                    if manual: raise ValueError('Повторный запрос к Wikidata доступен не чаще раза в час')
+                    return dict(_discovery_job)
+                if not manual and previous['last_success']:
+                    success=datetime.datetime.fromisoformat(previous['last_success'])
+                    if (now-success).total_seconds()<7*24*3600:
+                        return dict(_discovery_job)
+            # Record attempt before network IO so repeated app restarts do not
+            # hammer public endpoints if the service is unavailable.
+            db.execute("""
+                INSERT INTO discovery_runs(provider,last_attempt) VALUES('wikidata',?)
+                ON CONFLICT(provider) DO UPDATE SET last_attempt=excluded.last_attempt
+            """,(now.isoformat(),))
+            db.commit()
+        _discovery_job={'state':'running','added':0,'updated':0,'total':0,
+                        'message':'Wikidata: ищем компании по трём городам'}
+        threading.Thread(target=_run_discovery,daemon=True,name='CompanyDiscovery').start()
+        return dict(_discovery_job)
+
+
+def _run_discovery():
+    result=None
+    try:
+        found=discover_wikidata()
+        with _lock,closing(db_connection()) as db:
+            result=import_discovered(db,found,'Wikidata')
+            db.execute("""
+                UPDATE discovery_runs
+                SET last_success=?,last_result=?,last_added=?,last_updated=?
+                WHERE provider='wikidata'
+            """,(iso_now(),'ok',result['added'],result['updated']))
+            db.commit()
+    except Exception as exc:
+        # Never publish raw exception bodies from a third-party API.
+        with _lock,closing(db_connection()) as db:
+            db.execute("UPDATE discovery_runs SET last_result=? WHERE provider='wikidata'",
+                       ('Ошибка запроса к источнику',))
+            db.commit()
+        with _discovery_lock:
+            _discovery_job.update(state='failed',message='Wikidata сейчас недоступна; повторим позже')
+    else:
+        with _discovery_lock:
+            _discovery_job.update(state='done',added=result['added'],updated=result['updated'],
+                                  total=result['total'],message='Поиск завершён; источник может содержать мало компаний')
 
 
 def company_queue(db, limit=100):
@@ -683,8 +784,13 @@ def check_public_source(db, sid, token='', bypass_cooldown=False):
 
 
 def auto_check_loop(stop_event):
-    # Checks permissioned feeds at a configured interval while the app is running.
+    # Checks permissioned feeds and ONE low-frequency public company source.
     while not stop_event.wait(10):
+        try:
+            if preferences().get('company_auto_discovery', False):
+                start_discovery(manual=False)
+        except Exception:
+            pass
         try:
             with _lock, closing(db_connection()) as db:
                 rows = db.execute("SELECT * FROM public_sources WHERE enabled=1 AND kind IN ('vk','rss') ORDER BY last_attempt ASC, id ASC").fetchall()
@@ -736,7 +842,8 @@ class Handler(BaseHTTPRequestHandler):
         if "application/json" not in self.headers.get("Content-Type", ""):
             raise ValueError("Нужен JSON")
         size = int(self.headers.get("Content-Length", "0"))
-        if size > 2500000 or size < 2:
+        maximum = 17_000_000 if urlparse(self.path).path == '/api/company/import-geojson' else 2500000
+        if size > maximum or size < 2:
             raise ValueError("Неверный размер запроса")
         return json.loads(self.rfile.read(size))
 
@@ -768,6 +875,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/company/job":
                 with _company_job_lock:
                     return self.send_json(200,dict(_company_job))
+            if path == "/api/company/discovery":
+                return self.send_json(200,discovery_status())
             if path == "/api/update/check":
                 return self.send_json(200, latest_release())
             if path == "/api/update/progress":
@@ -851,6 +960,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {"error": "Недопустимый источник запроса"})
         try:
             data = {} if method == "DELETE" else self.read_body()
+            if path == '/api/company/discover' and method == 'POST':
+                return self.send_json(200,start_discovery(manual=True))
+            if path == '/api/company/import-geojson' and method == 'POST':
+                if not isinstance(data,dict) or not isinstance(data.get('geojson'),str):
+                    raise ValueError('Укажи город и текст GeoJSON')
+                records=parse_osm_geojson(data['geojson'],data.get('city',''))
+                with _lock,closing(db_connection()) as db:
+                    result=import_discovered(db,records,'OpenStreetMap extract')
+                    db.commit()
+                return self.send_json(200,result)
             if path == '/api/company/audit-batch' and method == 'POST':
                 if not isinstance(data,dict):
                     raise ValueError('Ожидается объект настроек')
@@ -886,6 +1005,11 @@ class Handler(BaseHTTPRequestHandler):
                         not isinstance(n,str) or n not in NICHE_NAMES for n in niches):
                         raise ValueError('Выбери хотя бы одну подходящую нишу')
                     fields['target_niches'] = list(dict.fromkeys(niches))
+                if 'company_auto_discovery' in data:
+                    enabled=data['company_auto_discovery']
+                    if not isinstance(enabled,bool):
+                        raise ValueError('Автопоиск должен быть true или false')
+                    fields['company_auto_discovery']=enabled
                 if 'startup' in data:
                     if not isinstance(data['startup'], bool):
                         raise ValueError('startup должен быть true или false')
