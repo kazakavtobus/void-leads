@@ -1,0 +1,23 @@
+/* Source Hub — compact, transparent channel status in Company Hunter */
+.company-source-hub{border-radius:19px;margin:0 0 17px;overflow:hidden;padding:0;background:#fff}
+.company-source-hub>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:19px 22px;cursor:pointer;list-style:none}
+.company-source-hub>summary::-webkit-details-marker{display:none}
+.company-source-hub>summary>span:first-child{display:flex;flex-direction:column;gap:3px}
+.company-source-hub>summary strong{font-size:20px;font-weight:780;letter-spacing:-.5px}
+.company-source-hub>summary small{font-size:13px;color:#7b8da4;line-height:1.5}
+.source-hub-arrow{font-size:21px;color:#7193c5;transition:transform .2s}
+.company-source-hub[open] .source-hub-arrow{transform:rotate(180deg)}
+.source-hub-top{margin:0 20px 14px;background:#f7f9fe;border:1px solid #e4ebf8;border-radius:14px;padding:13px 16px;display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.source-hub-top p{margin:0;line-height:1.55;color:#667891;font-size:13px;flex:1 1 100%}
+.source-hub-top code{display:inline-block;border-radius:9px;background:#eaf0fc;padding:7px 10px;word-break:break-word;font-size:13px;color:#455c83}
+.source-hub-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:0 20px 16px}
+.source-hub-entry{border:1px solid #e6ecf6;border-radius:15px;background:#fdfefe;padding:15px;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.source-hub-name{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:5px 7px;width:100%}
+.source-hub-name strong{font-size:14px;color:#30435f}
+.source-hub-state{border:1px solid #e4eaf4;border-radius:20px;padding:4px 8px;font-size:11px;color:#6e7c91;background:#f5f7fc;line-height:1.2}
+.source-hub-entry p{font-size:13px;color:#708198;line-height:1.5;margin:0;flex:1}
+.source-hub-entry .btn{font-size:12px;white-space:normal;text-align:left;padding:8px 10px;line-height:1.35}
+.source-hub-footer{padding:0 20px 17px;color:#7e8aa0;font-size:12px;line-height:1.6;margin:0}
+@media(max-width:1100px){.source-hub-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.company-source-hub>summary{padding:15px}.source-hub-grid{grid-template-columns:1fr;padding:0 12px 14px}.source-hub-top{margin:0 12px 13px}.source-hub-footer{padding:0 14px 14px}}
+@media(prefers-reduced-motion:reduce){.source-hub-arrow{transition:none}}
